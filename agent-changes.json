@@ -38,6 +38,15 @@
       "files": ["manual-step2.ts (untracked, throwaway)"],
       "details": "Config 8AtjAADknwG9bpbwPtRpkuyakynHTSj1E1XSXMYX7i9E, tx 4ogp8Bn4P5MmbiaiWtayy8VM4z1pgMHGDNKuDGgUSXk67JAAue9EEqdSaAdv1Bed32datv84RuoM3HmDouHFiDh6. Verified: discriminator 28dcc2fb29c77bfd = configWithTransferHook, owner = DBC program, hook pubkey bytes present, threshold 23256694100941 lamports (~23256 SOL, matches model), collectFeeMode=QuoteToken, tokenType=Token2022. Bug found on the way: web3.js 1.98 tx.sign() wipes other signatures — fixed by single tx.sign(configKp, wallet). Wallet AHe1Y4W5H7nuDocouDNa8SQZPQQ1iGfzdXmGJaR6MVV1 confirmed as deployer + feeClaimer.",
       "next": "Step 3: createPoolWithTransferHook (full-size pool #1), then initialize_config + initialize_extra_account_meta_list for the new mint."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 3 done: full-size TransferHookPool created and verified.",
+      "files": ["manual-step3.ts (untracked, throwaway)"],
+      "details": "Pool 7m6GnSPqNJozv7utedVKHRhh2YiUJHH4kRbRvGvAxpWp, baseMint 48EBUqvrN6UPzTC2kHbGqWbKkGYqiziBAM3WAtxdQ6se, tx 4Lg7qqM2hzs5qKx4NnhJXXSNyHbpPrSFabNLMWYaLXu9VGnP8RfyzmqdSw2VaHNcbTnq3gwFHUAMx2XXpmLgsTbD. Verified: discriminator eddbb8172abda923 = TransferHookPool, mint is Token-2022 with supply 1e15 (1B x 1e6) decimals 6, hook program + POOL_AUTHORITY set as transfer-hook authority. Signers for pool creation: payer + baseMint keypair.",
+      "next": "Step 4: hook initialize_config(pool) + initialize_extra_account_meta_list for mint 48EBUqvrN6UPzTC2kHbGqWbKkGYqiziBAM3WAtxdQ6se. Must be done BEFORE first swap."
     }
   ]
 }
