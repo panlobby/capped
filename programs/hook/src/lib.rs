@@ -28,6 +28,10 @@ pub const HOLD_S4: u64 = 20_000_000_000_000;
 pub const REMAIN_S1_MIN: u64 = 950_000_000_000_000;
 pub const REMAIN_S2_MIN: u64 = 850_000_000_000_000;
 pub const REMAIN_S3_MIN: u64 = 600_000_000_000_000;
+// Tail dust tolerance (base units = 1 token). DBC sqrt-price rounding leaves a
+// few hundred raw units undrainable (measured 459 after 30 swaps on devnet);
+// the final buy may leave at most this much above the migration lock.
+pub const TAIL_DUST_CAP: u64 = 1_000_000;
 // Byte size of HookConfig account data, legacy (no migration_lock) and current.
 pub const CONFIG_LEN_LEGACY: usize = 8 + 32 + 32 + 32 + 1;
 pub const CONFIG_LEN: usize = CONFIG_LEN_LEGACY + 8;
@@ -236,10 +240,16 @@ fn execute_checks(
         .ok_or(ErrorCode::InvalidPool)?;
 
     // 8. Bet size. Exact street bet, except the tail: when less than one bet
-    // is left buyable, the only legal buy takes the exact remainder.
-    // Sells always stay exact (they grow the vault, never drain it).
+    // is left buyable, the buy must drain (almost) all of it — DBC rounding
+    // leaves dust (<= TAIL_DUST_CAP) that no ExactOut can source, so the final
+    // buy may leave at most dust above the lock. Sells always stay exact
+    // (they grow the vault, never drain it).
     if src_is_pool && migration_lock > 0 && buyable < bet {
-        require!(amount > 0 && amount == buyable, ErrorCode::InvalidBetSize);
+        require!(amount > 0 && amount <= buyable, ErrorCode::InvalidBetSize);
+        require!(
+            remaining.saturating_sub(migration_lock) <= TAIL_DUST_CAP,
+            ErrorCode::InvalidBetSize
+        );
     } else {
         require!(amount > 0 && amount == bet, ErrorCode::InvalidBetSize);
     }
@@ -773,6 +783,21 @@ mod tests {
         let mut f = Fixture::new(TAIL_POST_DRAINED, POOL_AUTHORITY, 0, key(60), HOLD_S4 + 7_000_000_000, true, TAIL_LOCK);
         let err = f.run(POOL_AUTHORITY, 7_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::ExceedsHold.into());
+    }
+
+    #[test]
+    fn tail_buy_dust_leftover_passes() {
+        // DBC rounding leaves 459 raw units undrainable: post == lock + 459.
+        let mut f = Fixture::new(TAIL_LOCK + 459, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        assert!(f.run(POOL_AUTHORITY, 7_000_000_000 - 459).is_ok());
+    }
+
+    #[test]
+    fn tail_buy_over_dust_cap_reverts() {
+        // Leaving 2 tokens undrained (> 1-token cap) is not a final buy.
+        let mut f = Fixture::new(TAIL_LOCK + 2_000_000, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        let err = f.run(POOL_AUTHORITY, 5_000_000_000).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]

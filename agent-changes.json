@@ -155,6 +155,15 @@
       "files": ["programs/hook/src/lib.rs", "tests/hook.ts", "docs/limits-architecture.md"],
       "details": "Token-2022 debits/credits BEFORE the hook CPI (verified in spl-token-2022 6.0.0 processor.rs + live logs: hook saw post-debit vault). Old code judged tiers on post values -> street-boundary buys would revert + tail rule could never pass (take-the-rest observed as lock). Fix: pre = post + amount (buys) / post - amount (sells); tier + tail on pre; hold checks observed (post-credit) dest balance directly. Unit fixtures now encode POST vaults (TAIL 100k/106k/94.5k/119.5k), over-hold dst = cap + bet. Integration: 4 tail ctxs + over-hold funded 250k (direct call sees pre balances). Docs 1.4 corrected.",
       "next": "User redeploys to devnet, then tiny#2 tail graduation: exact-remainder final buy -> EvtCurveCompleteWithTransferHook -> hook revoked -> manual migrateToDammV2."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "Tail rule tolerates rounding dust (TAIL_DUST_CAP = 1 token). 22/22 + 14/14.",
+      "files": ["programs/hook/src/lib.rs", "docs/limits-architecture.md"],
+      "details": "Measured on tiny#2: max drainable 6671616416 vs remainder 6671616875 -> dust 459 raw units (DBC AmountLeftIsNotZero on exact remainder). cost(max) overshoots threshold gap by ~359k lamports, so the max-drain buy still graduates. Rule: tail buys require 0 < amount <= buyable AND post-vault - lock <= 1 token. 2 new unit tests (dust pass / over-cap revert). No integration changes needed (existing tail ctxs satisfy the cap).",
+      "next": "User redeploys to devnet, then live final buy ExactOut(6671616416) on tiny#2 -> graduation -> revocation check -> migrateToDammV2."
     }
   ]
 }

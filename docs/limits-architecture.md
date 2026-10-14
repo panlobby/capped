@@ -114,10 +114,13 @@ Hook checks per transfer: `amount == tier.bet` else `InvalidBetSize`;
 on buy `destination.amount + amount <= tier.hold` else `ExceedsHold`.
 Tail exception (buys only): `HookConfig.migration_lock` = base units locked for
 migration (`vault_0 - buyable_0`, computed off-chain at pool creation, required
-> 0). When `vault - lock < bet`, the only legal buy takes the exact remainder
-(`amount == vault - lock`); sells stay exact. Without a lock (pre-upgrade
-accounts) the hook stays strict `==` forever. Rationale: buyable is never an
-exact multiple of the bet (main pool leaves a ~7,059-token tail), so strict `==`
+> 0). When `vault - lock < bet`, the buy must drain (almost) all of it:
+`0 < amount <= vault - lock`, leaving at most `TAIL_DUST_CAP` (1 token)
+undrained — DBC sqrt-price rounding leaves a few hundred raw units no ExactOut
+can source (measured 459 on devnet), and the final buy's cost still crosses the
+migration threshold. Sells stay exact. Without a lock (pre-upgrade accounts)
+the hook stays strict `==` forever. Rationale: buyable is never an exact
+multiple of the bet (main pool leaves a ~7,059-token tail), so strict `==`
 makes graduation mathematically impossible; the tail rule restores
 possible-but-hard graduation while keeping chip discipline on 99.99% of the curve.
 
