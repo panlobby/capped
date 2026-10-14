@@ -11,6 +11,15 @@
       "files": [".gitignore", "agent-changes.json"],
       "details": "Repo was not a git repo. Ran git init -b main. Added standard Anchor/Rust/Node .gitignore. No code changes yet. First commit 793be12 done (14 files, lockfiles left untracked).",
       "next": "Fix anchor build toolchain (cargo 1.84 vs edition2024) to run tests/hook.ts."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "Fixed anchor build (dep pins) and ran validator tests: 14/14 unit + 10/10 integration pass.",
+      "files": ["Cargo.lock", "programs/hook/src/lib.rs", "Anchor.toml"],
+      "details": "Root cause: anchor build uses Solana platform-tools cargo 1.84, which cannot parse edition2024 crates. Pinned in Cargo.lock: zeroize 1.8.1->1.7.0, zeroize_derive 1.5.0->1.4.2, borsh 1.8.1->1.5.5 (derive ->1.5.7), proc-macro-crate 3.5.0->3.2.0, indexmap 2.14.2->2.9.0, unicode-segmentation 1.13.3->1.12.0. Regenerated program id (old keypair was gitignored/lost): declare_id + Anchor.toml now 3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH. anchor build OK (hook.so 288KB). cargo test -p hook 14/14 pass. tests/hook.ts 10/10 pass on solana-test-validator 2.3.0. NOTE: plain `anchor test` is broken on Node 26 (mocha 9 / yargs ESM error); workaround used: deploy with `solana program deploy` then `bun ./node_modules/.bin/mocha -t 1000000 --require ts-node/register tests/hook.ts` with ANCHOR_PROVIDER_URL=http://127.0.0.1:8899.",
+      "next": "Upgrade mocha/ts-mocha for Node 26 so `anchor test` works; then devnet E2E with real Meteora DBC (transfer-hook config + swap2WithTransferHook)."
     }
   ]
 }

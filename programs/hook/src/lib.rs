@@ -5,7 +5,7 @@ use spl_tlv_account_resolution::seeds::Seed;
 use spl_tlv_account_resolution::state::ExtraAccountMetaList;
 use spl_transfer_hook_interface::instruction::{ExecuteInstruction, TransferHookInstruction};
 
-declare_id!("HfYvu9izRMcgHJjZtKCgVMThyQQKg16MdmEfZ1RXgkYk");
+declare_id!("3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH");
 
 // ---- Units: 6 decimals, 1 token = 1_000_000 base units ----
 /// 12.5k tokens in base units. GCD of all bets/holds.
