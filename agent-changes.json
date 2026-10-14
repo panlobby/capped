@@ -137,6 +137,15 @@
       "files": [],
       "details": "Redeploy tx 5vToH6Wzd3Dim2eFqk6d8ov5zYrcmSTxgPbxjiZYbbEmSryG83tGQho1DVLt6PRHnqZ3Ror2peYQK3oCpmvTcSbV finalized, slot 511082878. Legacy buy 50k on pool #1 passed (tx 3F92vd9FxLsZyoX7AT3jez3MKjVEUDU5C15Cw6BVUTTA7r4tVEqavmQyKWWZvnuFTWyD18zpadFaq3DFqCdacnTD, balance exactly 50k) — manual-parse fallback verified on real old PDA.",
       "next": "Pool #2 (full-size) + tiny #2 with migration_lock, street re-tests, tail graduation to completion."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Pool #2 live with lock; buy 50k passes on new code.",
+      "files": ["manual-step7pool2.ts (untracked, throwaway)"],
+      "details": "Pool GDb8yv3CEBQpsUuthMatW5zMp9RCTiamigpCZjJfN4VZ, mint JBaZd2GNaV5Fmv3UVd4s2SP4bXQ22vWoQqbZdJ4fi2Jk (reused DBC config 8Atj...). vault_0 read live = 1e15 exactly; lock = 232567941009412 stored in 113-byte PDA, verified byte-for-byte. Buy 50k tx 4j3Q4kdfzV3koS6QQiu5iiAsndkJGALCnr5PRoWP9XG8cqvJiTHoGBMdo5pPR5YMJEgg66XkyCtZUDz2Ej3vwLe2, balance exactly 50k.",
+      "next": "Tiny #2 (reuse tiny config, lock = vault_0 - 381671616875), full buyout to graduation, verify revocation + DAMM v2 migration."
     }
   ]
 }
