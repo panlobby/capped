@@ -92,6 +92,15 @@
       "files": ["manual-step5d.ts (untracked, throwaway)"],
       "details": "Claim tx 35BUCbKfu16yvEFmBXrsmLKi7eNbgEXeXNY4U15xxYgTGawUSv7ZLU38dwopYtR75sNt8YEH1TPo8sPNKCe4jA1d. Balance +~0.00002 SOL net of tx fee — matches ~0.20% of the tiny test volume (~0.008 SOL). claimPartnerTradingFee2 path verified with receiver=feeClaimer=wallet.",
       "next": "Step 6: tiny pool (config + pool, ~500k supply, ~2-3 SOL threshold), buy out to graduation, verify hook revocation + DAMM v2 migration."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 6a done: tiny pool created + hook bound, buyout loop running.",
+      "files": ["manual-step6a.ts", "manual-step6b.ts (untracked, throwaway)"],
+      "details": "Tiny config GPduPehufvwcwFK4mmDck3VkPRuD8uBEEXapV8iNhuWR, pool qh6vZ1jGBVVB6C7FkBWuZisU8GHcg6c14EZUKjDSju8, mint GJ1bcz6fzrn9KJXqg26atdg2wGgKfUyxzXMPPQmACRCN. Threshold 2.581224428 SOL (supply 500k, mcap 0.005 -> 11 SOL). Hook bound via initializeConfig + extraMetas. Buyout loop (12.5k ExactOut) in progress, ~20 buys confirmed so far. Fix: state.getPool nests live state under poolState (quoteReserve etc. are at pool.poolState).",
+      "next": "When loop finishes: check graduation (EvtCurveCompleteWithTransferHook, hook revoked on mint), then DAMM v2 migration (manual migrateToDammV2 if auto-migrator absent on devnet)."
     }
   ]
 }
