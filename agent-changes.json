@@ -29,6 +29,15 @@
       "files": [],
       "details": "User chose manual runbook over a script. Verified SDK 1.5.13 API: partner.createConfigWithTransferHook, creator.createPoolWithTransferHook, pool.swap2WithTransferHook, partner.claimPartnerTradingFee2. Hook requires post-pool manual calls: initialize_config(pool) then initialize_extra_account_meta_list, before first swap. Gave two-pool plan: full-size streets test + tiny graduation test.",
       "next": "User runs manual devnet runbook. If hook needs == vs <= change (docs 7.1), do it after devnet results."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 2 done: transfer-hook config created and verified.",
+      "files": ["manual-step2.ts (untracked, throwaway)"],
+      "details": "Config 8AtjAADknwG9bpbwPtRpkuyakynHTSj1E1XSXMYX7i9E, tx 4ogp8Bn4P5MmbiaiWtayy8VM4z1pgMHGDNKuDGgUSXk67JAAue9EEqdSaAdv1Bed32datv84RuoM3HmDouHFiDh6. Verified: discriminator 28dcc2fb29c77bfd = configWithTransferHook, owner = DBC program, hook pubkey bytes present, threshold 23256694100941 lamports (~23256 SOL, matches model), collectFeeMode=QuoteToken, tokenType=Token2022. Bug found on the way: web3.js 1.98 tx.sign() wipes other signatures — fixed by single tx.sign(configKp, wallet). Wallet AHe1Y4W5H7nuDocouDNa8SQZPQQ1iGfzdXmGJaR6MVV1 confirmed as deployer + feeClaimer.",
+      "next": "Step 3: createPoolWithTransferHook (full-size pool #1), then initialize_config + initialize_extra_account_meta_list for the new mint."
     }
   ]
 }
