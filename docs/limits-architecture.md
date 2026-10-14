@@ -10,6 +10,7 @@ Status: hook implemented (`programs/hook`), 20/20 native Rust unit tests pass
 via local validator). Curve modeled (`scripts/curve-matrix.ts`, SDK 1.5.13).
 Devnet E2E in progress: transfer-hook config + full-size pool live, street bets
 verified on-chain (50k buy, InvalidBetSize/P2PBlocked rejections, sells, fee claim).
+Tiny pool GRADUATED end-to-end (see §8).
 
 ---
 
@@ -206,8 +207,25 @@ at 12.5k and grow holds only.
    (FixedBps25 option + creator 0%).
 5. Devnet end-to-end: deploy hook → mint → transfer-hook config/pool → real
    `swap2WithTransferHook` buys/sells → P2P-send rejection → Jupiter/fomo
-   visibility check.
+   visibility check. DONE except aggregator visibility (see §8).
 6. Curve completion kills the hook by design (kept migration); threshold +
-   breaker-less tail is the whole defense — monitor `quote_reserve` vs threshold.
-7. Sybil: hold caps bound each wallet (2M max = 0.2%); no per-wallet tx counting
-   in v1 (would cost fomo compatibility — see old Design B/C, rejected).
+   tail rule (`== remaining`, dust-tolerant) is the whole defense — monitor
+   `quote_reserve` vs threshold.
+7. Sybil: hold caps bound each wallet (20M max = 2% on S4); no per-wallet tx
+   counting in v1 (would cost fomo compatibility — see old Design B/C, rejected).
+
+## 8. Devnet graduation rehearsal (tiny pool, 2026-10-14) — PASSED
+
+Tiny curve (500k supply, 2.58 SOL threshold) bought out with exact 12.5k bets
+(30×) + tail buy `ExactOut(6671616416)` (max drainable; 459 raw units of DBC
+rounding dust left, `TAIL_DUST_CAP` = 1 token covers it).
+
+* Final buy tx `BDjEFprkNYL4cMek8AFy6LeAQYLeatrXb81BqfgNDJdGaSRYWGabvmtDJ2ZRkwg3zYDnTMfZQN8RkT9jpD6gerQ`:
+  hook log `street ok pre=125000000000 bet=12500000000 lock=118328383125`,
+  then DBC `TransferHookInstruction::Update` + `SetAuthority` — hook revoked
+  in the same swap. Mint no longer carries the hook program id.
+* quoteReserve crossed threshold (2,581,224,444 >= 2,581,224,428); vault left
+  at lock + 459 dust, migrated with the rest.
+* Manual `migrateToDammV2` tx `3j75CgKJRacDXQqqTLgxs2qh5c1KHeVyAYMF7tBhoGXVxUACqKdMip6KMBd7PosWjxzh3k5c7U1LjjqzYJ22MytC`
+  → `isMigrated = 1`. Full lifecycle proven: config → pool → hook → streets →
+  tail → revocation → DAMM v2.

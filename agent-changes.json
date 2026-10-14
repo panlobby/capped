@@ -164,6 +164,15 @@
       "files": ["programs/hook/src/lib.rs", "docs/limits-architecture.md"],
       "details": "Measured on tiny#2: max drainable 6671616416 vs remainder 6671616875 -> dust 459 raw units (DBC AmountLeftIsNotZero on exact remainder). cost(max) overshoots threshold gap by ~359k lamports, so the max-drain buy still graduates. Rule: tail buys require 0 < amount <= buyable AND post-vault - lock <= 1 token. 2 new unit tests (dust pass / over-cap revert). No integration changes needed (existing tail ctxs satisfy the cap).",
       "next": "User redeploys to devnet, then live final buy ExactOut(6671616416) on tiny#2 -> graduation -> revocation check -> migrateToDammV2."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "GRADUATION COMPLETE: tiny#2 tail buy -> hook revoked -> migrated to DAMM v2.",
+      "files": ["manual-step10migrate.ts (untracked, throwaway)", "docs/limits-architecture.md (§8)"],
+      "details": "Final buy ExactOut(6671616416) tx BDjEFprkNYL4cMek8AFy6LeAQYLeatrXb81BqfgNDJdGaSRYWGabvmtDJ2ZRkwg3zYDnTMfZQN8RkT9jpD6gerQ: hook passed tail (pre=125M, bet 12.5k, lock 118.33M), DBC Update+SetAuthority revoked hook same swap, quoteReserve 2581224444 >= threshold 2581224428, vault left lock+459 dust. migrateToDammV2 tx 3j75CgKJRacDXQqqTLgxs2qh5c1KHeVyAYMF7tBhoGXVxUACqKdMip6KMBd7PosWjxzh3k5c7U1LjjqzYJ22MytC -> isMigrated=1. Full lifecycle proven end-to-end.",
+      "next": "Mainnet prep: aggregator visibility check (Jupiter/fomo) if wanted, upgrade-authority decision (§7.3), final hook audit, remove manual-*.ts throwaways, mainnet config+pool with lock."
     }
   ]
 }
