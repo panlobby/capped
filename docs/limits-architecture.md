@@ -5,11 +5,11 @@ Goal: a token where every trade is a bet of a **pre-defined size**, like limit h
 pool trades on the curve. Tradable on **any DEX** supporting Token-2022 transfer hooks
 (Meteora UI, Jupiter, fomo.family) — no walled garden, no custom router in v1.
 
-Status: hook implemented (`programs/hook`), 20/20 native Rust unit tests pass
+Status: hook implemented (`programs/hook`), 27/27 native Rust unit tests pass
 (`cargo test -p hook`), 14/14 validator integration tests pass (`tests/hook.ts`
 via local validator). Curve modeled (`scripts/curve-matrix.ts`, SDK 1.5.13).
-Devnet E2E in progress: transfer-hook config + full-size pool live, street bets
-verified on-chain (50k buy, InvalidBetSize/P2PBlocked rejections, sells, fee claim).
+Devnet E2E complete: full lifecycle proven through DAMM v2 migration (see §8).
+Product decision FINAL: graduating DBC at $10M mcap (hook revoked at graduation).
 Tiny pool GRADUATED end-to-end (see §8).
 
 ---
@@ -116,7 +116,8 @@ on buy `destination.amount + amount <= tier.hold` else `ExceedsHold`.
 Tail exception (buys only): `HookConfig.migration_lock` = base units locked for
 migration (`vault_0 - buyable_0`, computed off-chain at pool creation, required
 > 0). When `vault - lock < bet`, the buy must drain (almost) all of it:
-`0 < amount <= vault - lock`, leaving at most `TAIL_DUST_CAP` (1 token)
+`0 < amount <= vault - lock`, leaving at most `TAIL_DUST_CAP` (10_000 raw units
+= 0.01 token)
 undrained — DBC sqrt-price rounding leaves a few hundred raw units no ExactOut
 can source (measured 459 on devnet), and the final buy's cost still crosses the
 migration threshold. Sells stay exact. Without a lock (pre-upgrade accounts)
@@ -181,23 +182,25 @@ at 12.5k and grow holds only.
 
 ## 6. Implementation status
 
-- `programs/hook/src/lib.rs`: done — config PDA, extra-metas init, `transfer_hook`
-  + `fallback` (strict `transferring` on real CPI), mock-pool helper for tests.
-- `cargo test -p hook`: **14/14 pass** (tier bounds, both pool layouts, exact/
-  wrong/hold/authority/P2P/strict-mode cases).
-- `tests/hook.ts`: validator integration written, **blocked** — `anchor build`
-  fails (platform cargo 1.84 can't parse 2026 edition2024 crates;
-  fixed `blake3→1.5.5` so far, `zeroize_derive 1.5.0` next). Needs toolchain
-  upgrade (Solana + anchor) before any on-chain test.
+- `programs/hook/src/lib.rs`: done — config PDA (immutable pool, graduating DBC),
+  extra-metas init (mint-bound config + authority check), `transfer_hook`
+  + `fallback` (strict `transferring` on real CPI), DBC owner/discriminator
+  check on full-size pools, token-mint cross-check, mock-pool helper for tests.
+- `cargo test -p hook`: **27/27 pass** (tier bounds, both pool layouts, exact/
+  wrong/hold/authority/P2P/strict-mode/tail-dust/owner/disc/mint cases).
+- `tests/hook.ts`: **14/14 pass** on local validator (`bun mocha --require
+  ts-node/register`; `anchor test` broken on Node 26 — mocha 9 / yargs ESM bug).
 - Curve matrix: done (see §3). Config-creation params file: not yet written.
 
 ## 7. Remaining decisions / risks
 
 1. Bet `==` exact vs `<=` max — DECIDED: hybrid. Strict `==` everywhere,
-   except the tail (`vault - migration_lock < bet`): buys take the exact
-   remainder, sells stay exact (implemented, 20/20 unit + 13/13 integration pass).
+   except the tail (`vault - migration_lock < bet`): buys take almost all of
+   the remainder (at most `TAIL_DUST_CAP` = 10_000 raw units left above lock),
+   sells stay exact (implemented, 27/27 unit + 14/14 integration pass).
    Mid-curve fomo `ExactIn` dust still reverts — accepted (separate UX issue).
-2. Accept S1 dust preflop (structural, see §3) vs raise S1 bet/start mcap.
+2. Accept S1 dust preflop — DECIDED: keep start $4.2k, preflop dust is part of
+   the design (anti-snipe grind).
 3. Upgrade authority policy (deployer → multisig/immutable timing). NOTE from
    devnet: HookConfig layout changes brick old pools' PDAs (deserialization
    fails → all transfers revert, funds stuck). A legacy fallback (lock = 0,
@@ -208,9 +211,10 @@ at 12.5k and grow holds only.
 5. Devnet end-to-end: deploy hook → mint → transfer-hook config/pool → real
    `swap2WithTransferHook` buys/sells → P2P-send rejection → Jupiter/fomo
    visibility check. DONE except aggregator visibility (see §8).
-6. Curve completion kills the hook by design (kept migration); threshold +
-   tail rule (`== remaining`, dust-tolerant) is the whole defense — monitor
-   `quote_reserve` vs threshold.
+6. Curve completion kills the hook by design — DECIDED graduating DBC at $10M
+   mcap (permanent-DBC option rejected; hook revoked at graduation, no limits
+   after). Threshold + tail rule is the whole defense — monitor `quote_reserve`
+   vs threshold.
 7. Sybil: hold caps bound each wallet (20M max = 2% on S4); no per-wallet tx
    counting in v1 (would cost fomo compatibility — see old Design B/C, rejected).
 
@@ -218,7 +222,9 @@ at 12.5k and grow holds only.
 
 Tiny curve (500k supply, 2.58 SOL threshold) bought out with exact 12.5k bets
 (30×) + tail buy `ExactOut(6671616416)` (max drainable; 459 raw units of DBC
-rounding dust left, `TAIL_DUST_CAP` = 1 token covers it).
+rounding dust left, `TAIL_DUST_CAP` = 10_000 raw units covers it with margin
+(post-fix cap tightened from 1 token to 0.01 token so the tail always
+graduates in a single swap).
 
 * Final buy tx `BDjEFprkNYL4cMek8AFy6LeAQYLeatrXb81BqfgNDJdGaSRYWGabvmtDJ2ZRkwg3zYDnTMfZQN8RkT9jpD6gerQ`:
   hook log `street ok pre=125000000000 bet=12500000000 lock=118328383125`,

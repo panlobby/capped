@@ -1,4 +1,4 @@
-// Curve modeling: 1B/6dec, start 4.2k -> migrate 20M, fee 25bps flat, SOL=100$.
+// Curve modeling: 1B/6dec, start 4.2k -> migrate $10M, fee 25bps flat, SOL=100$.
 // Walks the curve with 0.5 SOL ExactIn steps, snapshots streets at
 // 50M / 150M / 400M sold, prints ExactIn + ExactOut matrix per street.
 // Usage: bun scripts/curve-matrix.ts [w1,w2,w3,w4]  (default 5,10,25,40)
@@ -34,12 +34,12 @@ const sol = (n: number) => new BN(Math.round(n * LAMPORTS).toString());
 const fmtTok = (b: BN) => (Number(b.toString()) / BASE_DEC).toLocaleString("en-US", { maximumFractionDigits: 0 });
 const fmtSol = (b: BN) => (Number(b.toString()) / LAMPORTS).toFixed(4);
 
-// NOTE: builder mcaps are in QUOTE (SOL) units. $20M @ $100/SOL = 200_000 SOL.
+// NOTE: builder mcaps are in QUOTE (SOL) units. $10M @ $100/SOL = 100_000 SOL.
 const INITIAL_MCAP_SOL = 42; // $4.2k
 const MIGRATION_MCAP_SOL = 100_000; // $10M
 const weights = (process.argv[2] ?? "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1").split(",").map(Number);
 if (weights.length !== 16) throw new Error("need 16 weights (builder always makes 16 segments)");
-console.log(`weights=[${weights}] start=$4.2k migrate=$20M fee=25bps SOL=$${SOL_USD}\n`);
+console.log(`weights=[${weights}] start=$4.2k migrate=$10M fee=25bps SOL=$${SOL_USD}\n`);
 
 const cfg: any = buildCurveWithLiquidityWeights({
   token: {
@@ -93,7 +93,7 @@ bd.segmentAmounts.forEach((a: any, i: number) =>
 const swapBase = getBaseTokenForSwap(cfg.sqrtStartPrice, bd.finalSqrtPrice, cfg.curve);
 console.log(`  total buyable (walk target): ${fmtTok(swapBase)}`);
 console.log(`  migration threshold: ${fmtSol(cfg.migrationQuoteThreshold)} SOL`);
-console.log(`  migration quote for 20M mcap sanity: threshold should be << 200000 SOL`);
+console.log(`  migration quote for 10M mcap sanity: threshold should be << 100000 SOL`);
 
 // PoolConfig shape for quote fns
 const baseFee: any = getBaseFeeParams({

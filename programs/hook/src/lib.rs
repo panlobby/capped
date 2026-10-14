@@ -28,16 +28,23 @@ pub const HOLD_S4: u64 = 20_000_000_000_000;
 pub const REMAIN_S1_MIN: u64 = 950_000_000_000_000;
 pub const REMAIN_S2_MIN: u64 = 850_000_000_000_000;
 pub const REMAIN_S3_MIN: u64 = 600_000_000_000_000;
-// Tail dust tolerance (base units = 1 token). DBC sqrt-price rounding leaves a
+// Tail dust tolerance: 0.01 token in base units. DBC sqrt-price rounding leaves a
 // few hundred raw units undrainable (measured 459 after 30 swaps on devnet);
 // the final buy may leave at most this much above the migration lock.
-pub const TAIL_DUST_CAP: u64 = 1_000_000;
+// Cap is 10-20x the observed dust but small enough that the tail buy always
+// crosses migration_quote_threshold and graduates in a single swap.
+pub const TAIL_DUST_CAP: u64 = 10_000;
 // Byte size of HookConfig account data, legacy (no migration_lock) and current.
 pub const CONFIG_LEN_LEGACY: usize = 8 + 32 + 32 + 32 + 1;
 pub const CONFIG_LEN: usize = CONFIG_LEN_LEGACY + 8;
 
 /// DBC pool authority PDA (same for all Meteora DBC pools).
 pub const POOL_AUTHORITY: Pubkey = pubkey!("FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM");
+/// Meteora DBC program: owner of every real pool account.
+pub const DBC_PROGRAM_ID: Pubkey = pubkey!("dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN");
+/// Anchor discriminator of DBC `TransferHookPool` (idl `accounts`, verified
+/// against @meteora-ag/dynamic-bonding-curve-sdk): hex eddbb8172abda923.
+pub const TRANSFER_HOOK_POOL_DISC: [u8; 8] = [237, 219, 184, 23, 42, 189, 169, 35];
 /// Offset of `base_reserve: u64` in VirtualPool / TransferHookPool account data:
 /// 8 (disc) + 64 (VolatilityTracker) + 160 (5x Pubkey) = 232.
 pub const BASE_RESERVE_OFFSET: usize = 232;
@@ -46,15 +53,38 @@ pub const BASE_RESERVE_OFFSET: usize = 232;
 pub mod hook {
     use super::*;
 
-    /// Create config PDA ["config", mint]. Pool can be updated later via set_pool.
+    /// Create config PDA ["config", mint]. Graduating DBC (final decision):
+    /// pool is immutable after this call; there is no update instruction
+    /// (`set_pool` was removed: extra-metas PDA pins the pool statically,
+    /// so any post-init pool change would brick all transfers forever).
     /// migration_lock = base units locked for DAMM migration (vault_0 - buyable_0,
     /// computed off-chain at pool creation). Powers the tail rule; must be > 0.
+    /// MAINNET RUNBOOK: send createPoolWithTransferHook + initialize_config +
+    /// initialize_extra_account_meta_list atomically (single tx / bundle).
+    /// Config PDA init is first-come: a split launch lets a watcher front-run
+    /// initialize_config with a wrong pool/lock and brick the mint.
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
         pool: Pubkey,
         migration_lock: u64,
     ) -> Result<()> {
         require!(migration_lock > 0, ErrorCode::InvalidLock);
+        // Lenient mint check: if the mint carries a TransferHook extension, it
+        // must point at this program. Plain SPL mints (local integration tests)
+        // have no extension and pass; mainnet runbook requires a real
+        // Token-2022 hook mint (verified off-chain at launch).
+        {
+            use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions};
+            use spl_token_2022::extension::transfer_hook::TransferHook as TransferHookExt;
+            use spl_token_2022::state::Mint as Token2022Mint;
+            let data = ctx.accounts.mint.data.borrow();
+            if let Ok(state) = StateWithExtensions::<Token2022Mint>::unpack(&data) {
+                if let Ok(ext) = state.get_extension::<TransferHookExt>() {
+                    let hook_program: Option<Pubkey> = ext.program_id.into();
+                    require!(hook_program == Some(crate::ID), ErrorCode::WrongConfig);
+                }
+            }
+        }
         let config = &mut ctx.accounts.config;
         config.authority = ctx.accounts.authority.key();
         config.mint = ctx.accounts.mint.key();
@@ -67,14 +97,6 @@ pub mod hook {
             config.pool,
             config.migration_lock
         );
-        Ok(())
-    }
-
-    /// Update static pool address (authority only). Re-run init_extra_metas after.
-    pub fn set_pool(ctx: Context<SetPool>, pool: Pubkey) -> Result<()> {
-        require_keys_eq!(ctx.accounts.authority.key(), ctx.accounts.config.authority, ErrorCode::Unauthorized);
-        ctx.accounts.config.pool = pool;
-        msg!("pool set {}", pool);
         Ok(())
     }
 
@@ -199,10 +221,23 @@ fn execute_checks(
     // 3. Pool must be the static pool from config.
     require_keys_eq!(pool_ai.key(), cfg_pool, ErrorCode::WrongPool);
     require!(cfg_pool != Pubkey::default(), ErrorCode::PoolNotSet);
+    // 3b. Real DBC pools (full PoolState layout) must be owned by the DBC
+    // program and carry the TransferHookPool discriminator. Smaller layouts
+    // are unit/integration-test mocks only: on mainnet the pool is always a
+    // real DBC account, and pool_ai.key() is pinned by config above, so a
+    // deployer typo fails here instead of running at a wrong tier.
+    {
+        let pool_data = pool_ai.data.borrow();
+        if pool_data.len() >= BASE_RESERVE_OFFSET + 8 {
+            require_keys_eq!(*pool_ai.owner, DBC_PROGRAM_ID, ErrorCode::WrongPool);
+            let disc: [u8; 8] = pool_data[0..8].try_into().unwrap();
+            require!(disc == TRANSFER_HOOK_POOL_DISC, ErrorCode::WrongPool);
+        }
+    }
 
-    // 4. Parse token accounts (owner + pre-transfer amount).
-    let (src_owner, _src_amount) = parse_token_account(source)?;
-    let (dst_owner, dst_amount) = parse_token_account(destination)?;
+    // 4. Parse token accounts (mint + owner + pre-transfer amount).
+    let (src_owner, _src_amount) = parse_token_account(source, mint)?;
+    let (dst_owner, dst_amount) = parse_token_account(destination, mint)?;
 
     // 5. Transferring flags: strict on real CPI; lenient when account lacks extension (unit mocks).
     check_transferring_flag(source, strict_transferring)?;
@@ -281,10 +316,14 @@ fn tier_for(remaining: u64) -> (u64, u64) {
     }
 }
 
-/// Token-2022 base account: owner at [32..64], amount u64 LE at [64..72].
-fn parse_token_account(ai: &AccountInfo) -> Result<(Pubkey, u64)> {
+/// Token-2022 base account: mint [0..32] | owner [32..64] | amount u64 LE [64..72].
+/// Mint must match the hook's mint (Token-2022 also enforces this pre-CPI;
+/// the check makes the proof self-contained).
+fn parse_token_account(ai: &AccountInfo, mint: &AccountInfo) -> Result<(Pubkey, u64)> {
     let data = ai.data.borrow();
     require!(data.len() >= 72, ErrorCode::InvalidTokenAccount);
+    let acc_mint = Pubkey::new_from_array(data[0..32].try_into().unwrap());
+    require_keys_eq!(acc_mint, mint.key(), ErrorCode::InvalidTokenAccount);
     let owner = Pubkey::new_from_array(data[32..64].try_into().unwrap());
     let amount = u64::from_le_bytes(data[64..72].try_into().unwrap());
     Ok((owner, amount))
@@ -379,13 +418,6 @@ pub struct InitializeConfig<'info> {
 }
 
 #[derive(Accounts)]
-pub struct SetPool<'info> {
-    pub authority: Signer<'info>,
-    #[account(mut, has_one = authority)]
-    pub config: Account<'info, HookConfig>,
-}
-
-#[derive(Accounts)]
 #[instruction(seed: u64)]
 pub struct InitMockPool<'info> {
     #[account(mut)]
@@ -405,8 +437,15 @@ pub struct InitMockPool<'info> {
 pub struct InitializeExtraMetas<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
-    /// CHECK: validated in handler
+    /// CHECK: base mint; bound to config via PDA seeds + has_one below.
     pub mint: UncheckedAccount<'info>,
+    #[account(
+        seeds = [b"config", mint.key().as_ref()],
+        bump = config.bump,
+        has_one = mint @ ErrorCode::WrongConfig,
+        constraint = config.authority == payer.key() @ ErrorCode::Unauthorized,
+        constraint = config.pool != Pubkey::default() @ ErrorCode::PoolNotSet,
+    )]
     pub config: Account<'info, HookConfig>,
     /// CHECK: PDA ["extra-account-metas", mint], created here
     #[account(
@@ -492,16 +531,18 @@ mod tests {
     }
 
     /// Token account data: mint[0..32] | owner[32..64] | amount[64..72], rest zero.
-    fn token_data(owner: &Pubkey, amount: u64) -> Vec<u8> {
+    fn token_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
         let mut d = vec![0u8; 165];
+        d[0..32].copy_from_slice(mint.as_ref());
         d[32..64].copy_from_slice(owner.as_ref());
         d[64..72].copy_from_slice(&amount.to_le_bytes());
         d
     }
 
-    /// Real DBC pool layout: base_reserve at BASE_RESERVE_OFFSET.
+    /// Real DBC pool layout: TransferHookPool discriminator + base_reserve at BASE_RESERVE_OFFSET.
     fn pool_data(remaining: u64) -> Vec<u8> {
         let mut d = vec![0u8; BASE_RESERVE_OFFSET + 8];
+        d[0..8].copy_from_slice(&TRANSFER_HOOK_POOL_DISC);
         d[BASE_RESERVE_OFFSET..BASE_RESERVE_OFFSET + 8]
             .copy_from_slice(&remaining.to_le_bytes());
         d
@@ -548,6 +589,7 @@ mod tests {
         dst_lamports: u64,
         pool_lamports: u64,
         cfg_lamports: u64,
+        pool_owner: Pubkey,
     }
 
     impl Fixture {
@@ -567,15 +609,23 @@ mod tests {
                 extra_list,
                 config_key,
                 pool_key,
-                src_data: token_data(&src_owner, src_amount),
-                dst_data: token_data(&dst_owner, dst_amount),
+                src_data: token_data(&mint, &src_owner, src_amount),
+                dst_data: token_data(&mint, &dst_owner, dst_amount),
                 pool_data_v: if mock_pool { mock_pool_data(remaining) } else { pool_data(remaining) },
                 cfg_data: config_data(&key(30), &mint, &pool_key, lock),
                 src_lamports: 0,
                 dst_lamports: 0,
                 pool_lamports: 0,
                 cfg_lamports: 0,
+                // Real-layout pools are DBC-owned (owner+disc enforced);
+                // mock layouts are test-only and unchecked.
+                pool_owner: if mock_pool { key(55) } else { DBC_PROGRAM_ID },
             }
+        }
+
+        fn with_pool_owner(mut self, owner: Pubkey) -> Self {
+            self.pool_owner = owner;
+            self
         }
 
         fn run(
@@ -601,7 +651,7 @@ mod tests {
             let dst_owner_prog = key(52);
             let auth_owner_prog = key(53);
             let extra_owner_prog = key(54);
-            let pool_owner_prog = key(55);
+            let pool_owner_prog = self.pool_owner;
             let mut mint_l = mint_lamports;
             let mut auth_l = auth_lamports;
             let mut extra_l = extra_lamports;
@@ -793,11 +843,56 @@ mod tests {
     }
 
     #[test]
+    fn tail_buy_at_dust_cap_passes() {
+        // Boundary: exactly TAIL_DUST_CAP (10_000) left above lock is final.
+        let mut f = Fixture::new(TAIL_LOCK + 10_000, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        assert!(f.run(POOL_AUTHORITY, 7_000_000_000 - 10_000).is_ok());
+    }
+
+    #[test]
     fn tail_buy_over_dust_cap_reverts() {
-        // Leaving 2 tokens undrained (> 1-token cap) is not a final buy.
+        // Leaving 20_000 undrained (> 10_000 cap) is not a final buy:
+        // quote_reserve would stop short of the migration threshold.
+        let mut f = Fixture::new(TAIL_LOCK + 20_000, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        let err = f.run(POOL_AUTHORITY, 7_000_000_000 - 20_000).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn tail_buy_two_tokens_over_cap_reverts() {
+        // Leaving 2 tokens undrained (> 10_000 cap) is not a final buy.
         let mut f = Fixture::new(TAIL_LOCK + 2_000_000, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
         let err = f.run(POOL_AUTHORITY, 5_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn real_pool_wrong_owner_reverts() {
+        // Full-size pool not owned by DBC (deployer typo) fails closed.
+        let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, false, 0)
+            .with_pool_owner(key(55));
+        let err = f.run(POOL_AUTHORITY, BET_S3).unwrap_err();
+        assert_eq!(err, ErrorCode::WrongPool.into());
+    }
+
+    #[test]
+    fn real_pool_wrong_discriminator_reverts() {
+        // Full-size DBC-owned pool with a bad discriminator fails closed.
+        let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, false, 0);
+        for b in f.pool_data_v[0..8].iter_mut() {
+            *b = 0;
+        }
+        let err = f.run(POOL_AUTHORITY, BET_S3).unwrap_err();
+        assert_eq!(err, ErrorCode::WrongPool.into());
+    }
+
+    #[test]
+    fn token_mint_mismatch_reverts() {
+        // Source account carries a different mint than the hook mint.
+        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 1_000_000_000_000_000, key(60), 0, true, 0);
+        f.src_data[0..32].copy_from_slice(key(99).as_ref());
+        let err = f.run(POOL_AUTHORITY, BET_S1).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidTokenAccount.into());
     }
 
     #[test]
@@ -824,8 +919,8 @@ mod tests {
         let (config_key, _) =
             Pubkey::find_program_address(&[b"config", mint.as_ref()], &program_id);
         let pool_key = key(20);
-        let mut src_data = token_data(&POOL_AUTHORITY, 0);
-        let mut dst_data = token_data(&key(60), 0);
+        let mut src_data = token_data(&mint, &POOL_AUTHORITY, 0);
+        let mut dst_data = token_data(&mint, &key(60), 0);
         let mut pool_data_v = mock_pool_data(107_000_000_000);
         let mut cfg_data = legacy_config_data(&key(30), &mint, &pool_key);
         assert_eq!(cfg_data.len(), CONFIG_LEN_LEGACY);
@@ -868,8 +963,8 @@ mod tests {
         let (config_key, _) =
             Pubkey::find_program_address(&[b"config", mint.as_ref()], &program_id);
         let pool_key = key(20);
-        let mut src_data = token_data(&POOL_AUTHORITY, 0);
-        let mut dst_data = token_data(&key(60), 0);
+        let mut src_data = token_data(&mint, &POOL_AUTHORITY, 0);
+        let mut dst_data = token_data(&mint, &key(60), 0);
         let mut pool_data_v = mock_pool_data(S1_REM);
         let mut cfg_data = config_data(&key(30), &mint, &pool_key, 0);
         let (mut a, mut b, mut c, mut d, mut e, mut g, mut h) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
