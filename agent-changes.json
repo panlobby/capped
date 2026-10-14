@@ -65,6 +65,15 @@
       "files": ["manual-step5a.ts (untracked, throwaway)"],
       "details": "Swap tx 3d4umvkxtC88YGaDPm3jyZmzk7Uv4c61ksR1L3BdaYBwEA63NdXb2qcHLeyoaXvuJ85QvnC2CBnvFVq8e6d2zqJx. Cost 2128171 lamports (~0.0021 SOL ~ $0.21) — matches curve-matrix S1 dust prediction exactly. User balance exactly 50_000 tokens. Logs confirm hook program CPI inside Swap2WithTransferHook.",
       "next": "Step 5b: wrong-size buy 30k (expect InvalidBetSize), then sell 50k, P2P rejection, fee claim."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 5b done: 30k buy rejected on-chain with InvalidBetSize.",
+      "files": ["manual-step5b.ts (untracked, throwaway)"],
+      "details": "Tx 5AJNXYbAsXTJHb19CJaraGbXnH5WFhC1vc62cRJYqku2Nk9cD2RGwtnrpavLRVVoU4w8uZAtGWjEysKjfnVroTnt finalized with InstructionError Custom 6005. Logs: AnchorError at programs/hook/src/lib.rs:193 InvalidBetSize (0x1775), propagated through Token-2022 -> DBC. Hook rejects wrong bet size on live pool, not just in unit tests. Also fixed the snippet to confirmTransaction (skipPreflight sig alone proves nothing).",
+      "next": "Step 5c: sell 50k (expect pass), P2P transfer (expect P2PBlocked), claimPartnerTradingFee2."
     }
   ]
 }
