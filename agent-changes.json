@@ -1,0 +1,16 @@
+{
+  "project": "capped-token",
+  "purpose": "Shared log of changes so other agents know what was done, why, and what is next.",
+  "howToUse": "Append a new object to 'changes' on every task. Keep summary short (1-2 lines). List touched files. Write in simple English.",
+  "changes": [
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "init",
+      "summary": "Initialized git repo (main branch) and created this changelog.",
+      "files": [".gitignore", "agent-changes.json"],
+      "details": "Repo was not a git repo. Ran git init -b main. Added standard Anchor/Rust/Node .gitignore. No code changes yet.",
+      "next": "First commit. Then fix anchor build toolchain (cargo 1.84 vs edition2024) to run tests/hook.ts."
+    }
+  ]
+}

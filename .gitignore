@@ -1,0 +1,21 @@
+# Rust / Anchor
+target/
+test-ledger/
+.anchor/
+.DS_Store
+
+# Node
+node_modules/
+dist/
+build/
+
+# Keys and local env
+*.json.bak
+.anchor/program.json
+target/deploy/*-keypair.json
+!target/deploy/.gitkeep
+.env
+.env.local
+
+# Logs
+*.log
