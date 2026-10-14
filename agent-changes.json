@@ -119,6 +119,15 @@
       "files": ["programs/hook/src/lib.rs", "tests/hook.ts", "docs/limits-architecture.md"],
       "details": "Holds 200k/1M/5M/20M. Thresholds 950M/850M/600M (vault scale; old 717/617/367M assumed buyable scale — streets lagged: S1 lasted till sold 283M instead of 50M). HookConfig.migration_lock appended last (space 105->113); initialize_config requires lock>0; pre-upgrade PDAs fall back to lock=0 strict-== (no bricking). Tail: buys with vault-lock<bet must take exact remainder; sells strict. 6 new unit tests (tail pass/partial/full-bet/over-hold/sell-exact/legacy-strict), 3 new integration tests (tail ctx lock=100k+7k). anchor build OK, local validator 13/13 via bun mocha. Next: redeploy hook to devnet + recreate pools with lock (lock_main = vault_0 - buyable_0 = 1e15 - 767432058990588 = 232567941009412 raw), then finish tiny#2 graduation test.",
       "next": "Redeploy hook to devnet (upgrade, same program id). Recreate main pool #2 + tiny #2 with migration_lock. Re-run street tests + tail graduation."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "Legacy fallback was broken (discriminator trap); fixed with manual parse. Lesson logged.",
+      "files": ["programs/hook/src/lib.rs"],
+      "details": "First fallback used a second Anchor struct (HookConfigLegacy) — but Anchor types get distinct discriminators, so real old PDAs (HookConfig discriminator, 105 bytes) failed deser -> WrongConfig -> old pools bricked (caught on devnet pool #1 buy: 0x1773 WrongConfig). Fixed: manual field parse, same discriminator, lock tail defaults to 0. Legacy unit test rewritten to truncate real HookConfig bytes (faithful old-PDA simulation). 20/20 unit + 13/13 integration pass. Deployed binary grew 288448->293280 bytes; programdata extended +50000. Mainnet lesson stands and is now proven: finalize logic before mainnet, upgrades after pools exist are dangerous.",
+      "next": "User redeploys fixed build to devnet, then legacy re-test on pool #1, then pool #2 + tiny #2 with lock."
     }
   ]
 }
