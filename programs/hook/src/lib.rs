@@ -95,7 +95,11 @@ pub mod hook {
         require_keys_eq!(pool, ctx.accounts.pool.key(), ErrorCode::WrongPool);
         {
             let data = ctx.accounts.pool.data.borrow();
-            if data.len() >= BASE_RESERVE_OFFSET + 8 {
+            let is_real = data.len() >= BASE_RESERVE_OFFSET + 8;
+            // Mainnet builds never accept mock-size pools here.
+            #[cfg(not(feature = "local-test"))]
+            require!(is_real, ErrorCode::InvalidPool);
+            if is_real {
                 require_keys_eq!(*ctx.accounts.pool.owner, DBC_PROGRAM_ID, ErrorCode::WrongPool);
                 let disc: [u8; 8] = data[0..8].try_into().unwrap();
                 require!(disc == TRANSFER_HOOK_POOL_DISC, ErrorCode::WrongPool);
@@ -120,7 +124,9 @@ pub mod hook {
         Ok(())
     }
 
-    /// Test-only: create MockPool PDA with given remaining. Not used on mainnet.
+    /// Test-only (local-test feature): create MockPool PDA with given remaining.
+    /// Never enabled on mainnet builds.
+    #[cfg(feature = "local-test")]
     pub fn init_mock_pool(ctx: Context<InitMockPool>, _seed: u64, remaining: u64) -> Result<()> {
         ctx.accounts.mock_pool.remaining = remaining;
         msg!("mock pool {}", remaining);
@@ -383,7 +389,7 @@ fn parse_token_account(ai: &AccountInfo, mint: &AccountInfo) -> Result<(Pubkey, 
 }
 
 /// Real DBC layout: base_reserve u64 LE at offset 232.
-/// Test mocks: Anchor MockPool (8-byte discriminator + u64 remaining) or raw 8-byte.
+/// Mock layouts below are local-test only; mainnet builds reject them.
 fn read_base_reserve(pool_ai: &AccountInfo) -> Result<u64> {
     let data = pool_ai.data.borrow();
     if data.len() >= BASE_RESERVE_OFFSET + 8 {
@@ -392,11 +398,20 @@ fn read_base_reserve(pool_ai: &AccountInfo) -> Result<u64> {
                 .try_into()
                 .unwrap(),
         ))
-    } else if data.len() >= 16 {
-        // Anchor MockPool: discriminator [0..8], remaining [8..16].
-        Ok(u64::from_le_bytes(data[8..16].try_into().unwrap()))
     } else if data.len() >= 8 {
-        Ok(u64::from_le_bytes(data[0..8].try_into().unwrap()))
+        #[cfg(feature = "local-test")]
+        {
+            if data.len() >= 16 {
+                // Anchor MockPool: discriminator [0..8], remaining [8..16].
+                return Ok(u64::from_le_bytes(data[8..16].try_into().unwrap()));
+            }
+            // Raw 8-byte mock.
+            return Ok(u64::from_le_bytes(data[0..8].try_into().unwrap()));
+        }
+        #[cfg(not(feature = "local-test"))]
+        {
+            err!(ErrorCode::InvalidPool)
+        }
     } else {
         err!(ErrorCode::InvalidPool)
     }
@@ -446,9 +461,10 @@ pub struct HookConfig {
     pub migration_lock: u64,
 }
 
-/// Test-only helper: mock pool holding base_remaining for tier tests.
+/// Test-only helper (local-test feature): mock pool holding base_remaining.
 /// Real DBC pools are read at BASE_RESERVE_OFFSET instead.
 #[account]
+#[cfg(feature = "local-test")]
 pub struct MockPool {
     pub remaining: u64,
 }
@@ -473,6 +489,7 @@ pub struct InitializeConfig<'info> {
 }
 
 #[derive(Accounts)]
+#[cfg(feature = "local-test")]
 #[instruction(seed: u64)]
 pub struct InitMockPool<'info> {
     #[account(mut)]

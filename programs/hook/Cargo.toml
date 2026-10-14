@@ -10,6 +10,10 @@ name = "hook"
 
 [features]
 default = []
+# Local testing only: mock pools (<240B layouts skip DBC checks) + init_mock_pool.
+# Unit/integration tests run with --features local-test. MAINNET builds must
+# NEVER enable it: without this feature every pool must be a full-size DBC pool.
+local-test = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []

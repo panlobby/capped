@@ -323,6 +323,21 @@
       ],
       "details": "Remaining before mainnet: (1) feature-gate mocks (agent: opencode); (2) metadata name/symbol/uri+image (owner: deployer); (3) upgrade-authority decision multisig-vs-renounce §7.3 (owner: deployer); (4) atomic mainnet launch script in scripts/ incl. bit-exact lock computation + aggregator smoke test (agent: opencode, needs metadata first); (5) keypair backup off-machine (owner: deployer). Devnet phase journal (entries 1-25) accepted as complete history.",
       "next": "Implement (1), then hand (2)-(3) to deployer."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "feature",
+      "summary": "Feature-gate implemented: mocks only under local-test, mainnet IDL clean. 31/31 + 14/14.",
+      "files": [
+        "programs/hook/src/lib.rs",
+        "programs/hook/Cargo.toml",
+        "tests/hook.ts",
+        "docs/limits-architecture.md",
+        ".github/workflows/ci.yml"
+      ],
+      "details": "local-test feature gates init_mock_pool/InitMockPool/MockPool and <240B branches in read_base_reserve; initialize_config requires full-size pool unless feature. Verified: cargo test --features local-test 31/31; anchor build -- --features local-test -> validator 14/14 (initMockPool path proves feature on); plain anchor build -> IDL has only initialize_config/initialize_extra_account_meta_list/transfer_hook (no mocks, no set_pool). CI + docs §6 updated with feature commands. Mainnet binary must always be plain anchor build.",
+      "next": "Metadata (deployer), upgrade-authority decision, atomic mainnet launch script."
     }
   ]
 }

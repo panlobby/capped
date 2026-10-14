@@ -186,10 +186,14 @@ at 12.5k and grow holds only.
   extra-metas init (mint-bound config + authority check), `transfer_hook`
   + `fallback` (strict `transferring` on real CPI), DBC owner/discriminator
   check on full-size pools, token-mint cross-check, mock-pool helper for tests.
-- `cargo test -p hook`: **31/31 pass** (tier bounds, both pool layouts, exact/
-  wrong/hold/authority/P2P/strict-mode/tail-dust/owner/disc/mint/vault cases).
+- `cargo test -p hook --features local-test`: **31/31 pass** (tier bounds, both
+  pool layouts, exact/wrong/hold/authority/P2P/strict-mode/tail-dust/owner/disc/
+  mint/vault cases). `local-test` gates `init_mock_pool` + `<240B` mock branches;
+  MAINNET builds use plain `anchor build` (mocks compiled out, full-size DBC
+  pools required unconditionally).
 - `tests/hook.ts`: **14/14 pass** on local validator (`bun mocha --require
   ts-node/register`; `anchor test` broken on Node 26 — mocha 9 / yargs ESM bug).
+  Validator binary built with `anchor build -- --features local-test`.
 - Curve matrix: done (see §3). Config-creation params file: not yet written.
 
 ## 7. Remaining decisions / risks
