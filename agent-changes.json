@@ -56,6 +56,15 @@
       "files": ["manual-step4.ts (untracked, throwaway)"],
       "details": "initializeConfig tx 3tnT5URBRFZ6p2DppfakhLEW6SuwoQ4poZTE6SAUbWd9UNFcdHnRHpK6H1rNf1G8Su49zhXybJBTnfKLKZqdU8Gh, extraMetas tx 4ecjhjERca3LiPBU1Nb6Z3i6xUTQ9D15HZ9prMR1qk1sv8g6ZFStwZ7wDn91KyydGZVfUiJo8SgyLa1MZPfHHS4S4. Config PDA 67yz8gAPeHq5V4ktDjip49rRpenVfV8AxtZV74H589S1 holds authority=AHe1, mint=48EB, pool=7m6G. Extra metas PDA Gabmvb9cbX8MxZpk5TimGSSWWPyaJAWcUSRZ1rdpNVvD exists (86 bytes, hook-owned). Pool #1 fully wired: DBC pool + mint hook + hook config.",
       "next": "Step 5: test swaps via swap2WithTransferHook (ExactOut buys per street, sell, P2P rejection, fee claim)."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 5a done: first real S1 buy (50k ExactOut) passed through the hook.",
+      "files": ["manual-step5a.ts (untracked, throwaway)"],
+      "details": "Swap tx 3d4umvkxtC88YGaDPm3jyZmzk7Uv4c61ksR1L3BdaYBwEA63NdXb2qcHLeyoaXvuJ85QvnC2CBnvFVq8e6d2zqJx. Cost 2128171 lamports (~0.0021 SOL ~ $0.21) — matches curve-matrix S1 dust prediction exactly. User balance exactly 50_000 tokens. Logs confirm hook program CPI inside Swap2WithTransferHook.",
+      "next": "Step 5b: wrong-size buy 30k (expect InvalidBetSize), then sell 50k, P2P rejection, fee claim."
     }
   ]
 }
