@@ -101,6 +101,15 @@
       "files": ["manual-step6a.ts", "manual-step6b.ts (untracked, throwaway)"],
       "details": "Tiny config GPduPehufvwcwFK4mmDck3VkPRuD8uBEEXapV8iNhuWR, pool qh6vZ1jGBVVB6C7FkBWuZisU8GHcg6c14EZUKjDSju8, mint GJ1bcz6fzrn9KJXqg26atdg2wGgKfUyxzXMPPQmACRCN. Threshold 2.581224428 SOL (supply 500k, mcap 0.005 -> 11 SOL). Hook bound via initializeConfig + extraMetas. Buyout loop (12.5k ExactOut) in progress, ~20 buys confirmed so far. Fix: state.getPool nests live state under poolState (quoteReserve etc. are at pool.poolState).",
       "next": "When loop finishes: check graduation (EvtCurveCompleteWithTransferHook, hook revoked on mint), then DAMM v2 migration (manual migrateToDammV2 if auto-migrator absent on devnet)."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "finding",
+      "summary": "CRITICAL: exact-bet hook makes graduation mathematically impossible (tail trap).",
+      "files": [],
+      "details": "Tiny pool stuck at reserve 2.438/2.581 SOL: ExactOut 12.5k and 10k quote FAIL (Not enough liquidity), 5k OK — remaining buyable is 5-10k tokens, unbuyable with == 12.5k bets. Main pool same disease: buyable = 767432058990588 raw (767,432,058.99 tokens), buyable % 12.5k = 7058990588 raw (~7,059 tokens tail). So main pool can NEVER graduate either — not 'almost unreachable' (docs 3/7.6) but literally unreachable. Funds not locked (sells always work). Options: (a) switch hook to <= (one-line + tests; tail becomes buyable, fomo ExactIn UX fixed too — docs 7.1 already recommended); (b) keep == and calibrate supply so buyable % bet == 0 (fragile); (c) accept permanent lock explicitly. Graduation mechanics test needs either (a) or a calibrated tiny pool #2.",
+      "next": "User decision: == vs <= vs accept-lock. Then either redeploy hook with <= or spin calibrated tiny pool #2."
     }
   ]
 }
