@@ -277,6 +277,19 @@
       ],
       "details": "First smoke with vault binding reverted InvalidPool on real pool: base_reserve at hook time is POST (DBC writes reserves before transfer CPI; tail-buy 459 dust only consistent with post). Fixed §7b to vault_post == reserve directly; unit Fixture realigns to post==post. Redeploy tx 2CPaiYLqbeyVfcejAq3FF23uDnY8Xbzvmz5uZP54vCghBPQsEXVzC6qK92wNFPBTQr6PGF4izDdLJaAacqRn6SBg. Buy ExactOut 50k tx LkErwZ79ErwQ8A61dxqLhjptZ8MvDKWpJXyUs6KqLxK98FYtbEMZGcq5R9Nycem4ZdX9MgPRyn6adLVVLKh8i8T (log street ok pre=999950000000000 bet=50B hold=200k lock=232567941009412), sell back 50k tx 2hVhsPcHtaZ6UkHpruUz9dNne23X7AGXdBBC3Ae2K3Ezy2kb1nMaq4y4MyA6tjcuyoPvzmGk486vGg9YdpSKFXYV. Owner/disc/base_vault/amount binding proven on live DBC data. 31/31 + 14/14 unchanged.",
       "next": "Repo cleanup (manual-*.ts, lockfiles, CI), metadata, upgrade-authority decision, mainnet runbook."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "cleanup",
+      "summary": "Repo cleanup: manual-*.ts removed, bun.lock tracked, CI added.",
+      "files": [
+        ".gitignore",
+        "bun.lock",
+        ".github/workflows/ci.yml"
+      ],
+      "details": "Deleted 13 untracked manual-step*.ts devnet throwaways (devnet phase done; manual scripts now stale vs new initializeConfig IDL anyway). Standardized on bun: bun.lock tracked, package-lock.json gitignored (both were untracked). Added minimal CI (cargo test -p hook --locked on push/PR). migrations/deploy.ts left as anchor scaffold. Reminder: back up target/deploy/hook-keypair.json off-machine (gitignored, upgrade authority).",
+      "next": "Metadata (name/symbol/uri+image), upgrade-authority decision (§7.3), mainnet runbook (atomic launch bundle)."
     }
   ]
 }
