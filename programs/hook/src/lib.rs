@@ -176,17 +176,19 @@ fn execute_checks(
         Pubkey::find_program_address(&[b"config", mint.key.as_ref()], program_id);
     require_keys_eq!(config_ai.key(), expect_config, ErrorCode::WrongConfig);
     require_keys_eq!(*config_ai.owner, *program_id, ErrorCode::WrongConfig);
-    // New layout carries migration_lock; pre-upgrade accounts fall back to lock 0
-    // (strict == forever — old pools keep working exactly as before).
+    // Manual parse: pre-upgrade accounts (105 bytes, same discriminator) carry
+    // no migration_lock tail -> lock 0 (strict == forever). Anchor-deserialize
+    // can't express this: a second struct type would expect its own discriminator.
+    use anchor_lang::solana_program::hash::hash;
     let raw = config_ai.data.borrow();
-    let (cfg_mint, cfg_pool, migration_lock) = if raw.len() >= CONFIG_LEN {
-        let cfg = HookConfig::try_deserialize(&mut &raw[..])
-            .map_err(|_| ErrorCode::WrongConfig)?;
-        (cfg.mint, cfg.pool, cfg.migration_lock)
+    require!(raw.len() >= CONFIG_LEN_LEGACY, ErrorCode::WrongConfig);
+    require!(raw[0..8] == hash(b"account:HookConfig").to_bytes()[0..8], ErrorCode::WrongConfig);
+    let cfg_mint = Pubkey::new_from_array(raw[40..72].try_into().unwrap());
+    let cfg_pool = Pubkey::new_from_array(raw[72..104].try_into().unwrap());
+    let migration_lock = if raw.len() >= CONFIG_LEN {
+        u64::from_le_bytes(raw[105..113].try_into().unwrap())
     } else {
-        let cfg = HookConfigLegacy::try_deserialize(&mut &raw[..])
-            .map_err(|_| ErrorCode::WrongConfig)?;
-        (cfg.mint, cfg.pool, 0u64)
+        0u64
     };
     drop(raw);
     require_keys_eq!(cfg_mint, mint.key(), ErrorCode::WrongConfig);
@@ -327,18 +329,9 @@ pub struct HookConfig {
     pub pool: Pubkey,
     pub bump: u8,
     /// Base units locked for DAMM migration. Appended last: pre-upgrade accounts
-    /// (105 bytes) deserialize via HookConfigLegacy with lock treated as 0
+    /// (105 bytes, same discriminator) read the tail as lock 0
     /// (strict == forever, old behavior preserved).
     pub migration_lock: u64,
-}
-
-/// Pre-upgrade config layout (no migration_lock). Read-only fallback.
-#[account]
-pub struct HookConfigLegacy {
-    pub authority: Pubkey,
-    pub mint: Pubkey,
-    pub pool: Pubkey,
-    pub bump: u8,
 }
 
 /// Test-only helper: mock pool holding base_remaining for tier tests.
@@ -514,14 +507,9 @@ mod tests {
     }
 
     fn legacy_config_data(authority: &Pubkey, mint: &Pubkey, pool: &Pubkey) -> Vec<u8> {
-        let cfg = HookConfigLegacy {
-            authority: *authority,
-            mint: *mint,
-            pool: *pool,
-            bump: 255,
-        };
-        let mut d = Vec::new();
-        cfg.try_serialize(&mut d).unwrap();
+        // Real pre-upgrade PDA bytes: HookConfig discriminator, no lock tail.
+        let mut d = config_data(authority, mint, pool, 0);
+        d.truncate(CONFIG_LEN_LEGACY);
         d
     }
 
