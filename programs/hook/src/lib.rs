@@ -293,8 +293,10 @@ fn execute_checks(
     }
 
     // 7. Tier from PRE-transfer vault. Token-2022 debits/credits BEFORE the
-    // hook CPI, so the hook observes post-transfer balances; reconstruct:
-    // buys drain the vault (pre = post + amount), sells fill it (pre = post - amount).
+    // hook CPI, so the hook observes POST-transfer balances AND a POST-transfer
+    // reserve (DBC writes virtual reserves before the transfer CPI — proven by
+    // the tiny-pool tail buy: remaining - lock == 459 dust only if remaining
+    // is post). Reconstruct pre: buys pre = post + amount, sells pre = post - amount.
     let remaining = read_base_reserve(pool_ai)?;
     let pre_remaining = if src_is_pool {
         remaining
@@ -312,22 +314,16 @@ fn execute_checks(
         .ok_or(ErrorCode::InvalidPool)?;
 
     // 7b. Vault amount consistency (real pools only): the pool-side account's
-    // POST-transfer amount must agree with pool.base_reserve. The hook observes
-    // post-transfer balances (Token-2022 debits/credits before the CPI), while
-    // the reserve still holds the pre value: buy vault_post + amount == R,
-    // sell vault_post - amount == R. (collect_fee_mode == QuoteToken: no base
-    // fees stay in the vault, so a legit swap moves exactly `amount`.)
+    // POST-transfer amount must equal pool.base_reserve (also POST at hook
+    // time, see §7). This proves the transfer ran inside DBC's
+    // swap2_with_transfer_hook with no extra base movement (no hidden base
+    // fees, no donations mixed into the swap) and blocks raw transfer_checked
+    // donations that would desync the vault from DBC virtual state.
     if pool_ai.data.borrow().len() >= BASE_RESERVE_OFFSET + 8 {
         if src_is_pool {
-            require!(
-                src_amount.checked_add(amount).ok_or(ErrorCode::MathOverflow)? == remaining,
-                ErrorCode::InvalidPool
-            );
+            require!(src_amount == remaining, ErrorCode::InvalidPool);
         } else {
-            require!(
-                dst_amount.checked_sub(amount).ok_or(ErrorCode::InvalidPool)? == remaining,
-                ErrorCode::InvalidPool
-            );
+            require!(dst_amount == remaining, ErrorCode::InvalidPool);
         }
     }
 
@@ -733,11 +729,6 @@ mod tests {
             // the binding without false rejections; negative tests corrupt it
             // via misalign_* builders. Mock layouts skip the binding entirely.
             if self.pool_data_v.len() >= BASE_RESERVE_OFFSET + 8 {
-                let r = u64::from_le_bytes(
-                    self.pool_data_v[BASE_RESERVE_OFFSET..BASE_RESERVE_OFFSET + 8]
-                        .try_into()
-                        .unwrap(),
-                );
                 let src_o =
                     Pubkey::new_from_array(self.src_data[32..64].try_into().unwrap());
                 let dst_o =
@@ -746,15 +737,18 @@ mod tests {
                     let vk = if self.corrupt_vault_key { key(77) } else { src_key };
                     self.pool_data_v[168..200].copy_from_slice(vk.as_ref());
                     if !self.corrupt_vault_amount {
-                        let v = r.checked_sub(amount).unwrap_or(0);
-                        self.src_data[64..72].copy_from_slice(&v.to_le_bytes());
+                        // POST-transfer vault == POST reserve (§7b).
+                        self.src_data[64..72].copy_from_slice(
+                            &self.pool_data_v[BASE_RESERVE_OFFSET..BASE_RESERVE_OFFSET + 8],
+                        );
                     }
                 } else if dst_o == POOL_AUTHORITY {
                     let vk = if self.corrupt_vault_key { key(77) } else { dst_key };
                     self.pool_data_v[168..200].copy_from_slice(vk.as_ref());
                     if !self.corrupt_vault_amount {
-                        let v = r.checked_add(amount).unwrap_or(u64::MAX);
-                        self.dst_data[64..72].copy_from_slice(&v.to_le_bytes());
+                        self.dst_data[64..72].copy_from_slice(
+                            &self.pool_data_v[BASE_RESERVE_OFFSET..BASE_RESERVE_OFFSET + 8],
+                        );
                     }
                 }
             }

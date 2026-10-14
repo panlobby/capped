@@ -266,6 +266,17 @@
       ],
       "details": "HIGH-1: InitializeConfig takes pool account; handler requires arg==account, and for real-size pools owner==DBC + TransferHookPool disc + creator==authority + base_mint==mint (offsets 104..136/136..168 verified vs SDK PoolState). Mock layouts skip (integration uses mock pools). Residual: determined front-runner with own real DBC pool still possible -> atomic launch mandatory (documented). HIGH-2: execute_checks binds pool-side account to pool.base_vault[168..200] and vault POST amount to base_reserve (buy post+amount==R, sell post-amount==R). 4 new tests (real sell pass, buy/sell vault-key mismatch, amount desync). Fixture auto-aligns vault side for real layouts. NOTE: manual-step*.ts now stale vs new IDL (initializeConfig needs pool account); throwaways pending deletion.",
       "next": "Devnet redeploy + re-verification (tiny pool tail/graduation with vault binding live), then repo cleanup (manual-*.ts, lockfiles, CI) and mainnet runbook."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Hardened hook redeployed; buy+sell smoke on main pool #2 passes live.",
+      "files": [
+        "programs/hook/src/lib.rs"
+      ],
+      "details": "First smoke with vault binding reverted InvalidPool on real pool: base_reserve at hook time is POST (DBC writes reserves before transfer CPI; tail-buy 459 dust only consistent with post). Fixed §7b to vault_post == reserve directly; unit Fixture realigns to post==post. Redeploy tx 2CPaiYLqbeyVfcejAq3FF23uDnY8Xbzvmz5uZP54vCghBPQsEXVzC6qK92wNFPBTQr6PGF4izDdLJaAacqRn6SBg. Buy ExactOut 50k tx LkErwZ79ErwQ8A61dxqLhjptZ8MvDKWpJXyUs6KqLxK98FYtbEMZGcq5R9Nycem4ZdX9MgPRyn6adLVVLKh8i8T (log street ok pre=999950000000000 bet=50B hold=200k lock=232567941009412), sell back 50k tx 2hVhsPcHtaZ6UkHpruUz9dNne23X7AGXdBBC3Ae2K3Ezy2kb1nMaq4y4MyA6tjcuyoPvzmGk486vGg9YdpSKFXYV. Owner/disc/base_vault/amount binding proven on live DBC data. 31/31 + 14/14 unchanged.",
+      "next": "Repo cleanup (manual-*.ts, lockfiles, CI), metadata, upgrade-authority decision, mainnet runbook."
     }
   ]
 }
