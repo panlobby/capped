@@ -216,35 +216,45 @@ fn execute_checks(
         ErrorCode::InvalidDirection
     );
 
-    // 7. Tier from pool base_remaining (vault balance scale).
+    // 7. Tier from PRE-transfer vault. Token-2022 debits/credits BEFORE the
+    // hook CPI, so the hook observes post-transfer balances; reconstruct:
+    // buys drain the vault (pre = post + amount), sells fill it (pre = post - amount).
     let remaining = read_base_reserve(pool_ai)?;
-    let (bet, hold) = tier_for(remaining);
-    // Buyable remainder after the migration lock. Vault never drops below the
-    // lock (locked tokens are not for sale), so underflow means bad data.
-    let remainder = remaining
+    let pre_remaining = if src_is_pool {
+        remaining
+            .checked_add(amount)
+            .ok_or(ErrorCode::MathOverflow)?
+    } else {
+        remaining
+            .checked_sub(amount)
+            .ok_or(ErrorCode::InvalidPool)?
+    };
+    let (bet, hold) = tier_for(pre_remaining);
+    // Buyable remainder after the migration lock, pre-transfer based.
+    let buyable = pre_remaining
         .checked_sub(migration_lock)
         .ok_or(ErrorCode::InvalidPool)?;
 
     // 8. Bet size. Exact street bet, except the tail: when less than one bet
     // is left buyable, the only legal buy takes the exact remainder.
     // Sells always stay exact (they grow the vault, never drain it).
-    if src_is_pool && migration_lock > 0 && remainder < bet {
-        require!(amount > 0 && amount == remainder, ErrorCode::InvalidBetSize);
+    if src_is_pool && migration_lock > 0 && buyable < bet {
+        require!(amount > 0 && amount == buyable, ErrorCode::InvalidBetSize);
     } else {
         require!(amount > 0 && amount == bet, ErrorCode::InvalidBetSize);
     }
     if src_is_pool {
         // Buy: vault -> user. Authority must be pool authority (DBC signs).
         require_keys_eq!(authority.key(), POOL_AUTHORITY, ErrorCode::Unauthorized);
-        let new_balance = dst_amount.checked_add(amount).ok_or(ErrorCode::MathOverflow)?;
-        require!(new_balance <= hold, ErrorCode::ExceedsHold);
+        // dst_amount is the POST-credit balance: enforce the cap directly.
+        require!(dst_amount <= hold, ErrorCode::ExceedsHold);
     } else {
         // Sell: user -> vault. Authority must own source (no delegates).
         require_keys_eq!(authority.key(), src_owner, ErrorCode::Unauthorized);
     }
     msg!(
-        "street ok remaining={} bet={} hold={} lock={}",
-        remaining, bet, hold, migration_lock
+        "street ok pre={} bet={} hold={} lock={}",
+        pre_remaining, bet, hold, migration_lock
     );
     Ok(())
 }
@@ -624,9 +634,12 @@ mod tests {
     const S2_REM: u64 = 900_000_000_000_000;
     const S3_REM: u64 = 700_000_000_000_000;
     const S4_REM: u64 = 100_000_000_000_000;
-    // Tail zone: lock 100k tokens, 7k tokens buyable (< BET_S4).
+    // Tail zone: lock 100k tokens. Mock `remaining` is the POST-debit vault;
+    // true remainder R is implied per case (R = post + amount - lock).
     const TAIL_LOCK: u64 = 100_000_000_000;
-    const TAIL_REM: u64 = 107_000_000_000;
+    const TAIL_POST_DRAINED: u64 = 100_000_000_000; // post == lock (R taken fully)
+    const TAIL_POST_PARTIAL: u64 = 106_000_000_000; // R=7k, A=1k in flight
+    const TAIL_POST_OVERSIZE: u64 = 94_500_000_000; // R=7k, A=12.5k in flight
 
     #[test]
     fn tier_selection() {
@@ -666,7 +679,8 @@ mod tests {
 
     #[test]
     fn s1_buy_over_hold_reverts() {
-        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), HOLD_S1, true, 0);
+        // dst is the POST-credit balance: 250k > 200k cap.
+        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), HOLD_S1 + BET_S1, true, 0);
         let err = f.run(POOL_AUTHORITY, BET_S1).unwrap_err();
         assert_eq!(err, ErrorCode::ExceedsHold.into());
     }
@@ -732,29 +746,31 @@ mod tests {
 
     #[test]
     fn tail_buy_remainder_passes() {
-        // 7k buyable (< BET_S4): the only legal buy takes the exact remainder.
-        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        // True remainder R=7k (< BET_S4): the only legal buy takes it exactly.
+        let mut f = Fixture::new(TAIL_POST_DRAINED, POOL_AUTHORITY, 0, key(60), 7_000_000_000, true, TAIL_LOCK);
         assert!(f.run(POOL_AUTHORITY, 7_000_000_000).is_ok());
     }
 
     #[test]
     fn tail_buy_partial_reverts() {
-        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        // R=7k in flight as 1k: 1k != 7k.
+        let mut f = Fixture::new(TAIL_POST_PARTIAL, POOL_AUTHORITY, 0, key(60), 1_000_000_000, true, TAIL_LOCK);
         let err = f.run(POOL_AUTHORITY, 1_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
     fn tail_buy_full_bet_reverts() {
-        // Remainder is smaller than the bet: a full bet no longer fits.
-        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        // R=7k in flight as a full 12.5k bet: 12.5k != 7k.
+        let mut f = Fixture::new(TAIL_POST_OVERSIZE, POOL_AUTHORITY, 0, key(60), BET_S4, true, TAIL_LOCK);
         let err = f.run(POOL_AUTHORITY, BET_S4).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
     fn tail_buy_over_hold_reverts() {
-        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), HOLD_S4, true, TAIL_LOCK);
+        // Remainder taken exactly, but post-credit balance exceeds the cap.
+        let mut f = Fixture::new(TAIL_POST_DRAINED, POOL_AUTHORITY, 0, key(60), HOLD_S4 + 7_000_000_000, true, TAIL_LOCK);
         let err = f.run(POOL_AUTHORITY, 7_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::ExceedsHold.into());
     }
@@ -762,10 +778,11 @@ mod tests {
     #[test]
     fn tail_sell_stays_exact() {
         // Sells never get the tail exception: exact bet passes, remainder reverts.
+        // Post-vault 119.5k (pre 107k after a 12.5k sell / 112.5k after a 7k one).
         let user = key(60);
-        let mut f = Fixture::new(TAIL_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
+        let mut f = Fixture::new(119_500_000_000, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
         assert!(f.run(user, BET_S4).is_ok());
-        let mut f2 = Fixture::new(TAIL_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
+        let mut f2 = Fixture::new(119_500_000_000, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
         let err = f2.run(user, 7_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
@@ -784,7 +801,7 @@ mod tests {
         let pool_key = key(20);
         let mut src_data = token_data(&POOL_AUTHORITY, 0);
         let mut dst_data = token_data(&key(60), 0);
-        let mut pool_data_v = mock_pool_data(TAIL_REM);
+        let mut pool_data_v = mock_pool_data(107_000_000_000);
         let mut cfg_data = legacy_config_data(&key(30), &mint, &pool_key);
         assert_eq!(cfg_data.len(), CONFIG_LEN_LEGACY);
         let (mut a, mut b, mut c, mut d, mut e, mut g, mut h) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64);

@@ -115,14 +115,20 @@ describe("hookasino caps", () => {
       .rpc();
   }
 
-  let s1: StreetCtx, s2: StreetCtx, s3: StreetCtx, s4: StreetCtx, sTail: StreetCtx;
+  let s1: StreetCtx, s2: StreetCtx, s3: StreetCtx, s4: StreetCtx;
+  let sTailBuy: StreetCtx, sTailPartial: StreetCtx, sTailFull: StreetCtx, sTailSell: StreetCtx;
 
   before(async () => {
     s1 = await setupStreet(990_000_000, 1); // S1: >950M
     s2 = await setupStreet(900_000_000, 2); // S2
     s3 = await setupStreet(700_000_000, 3); // S3
     s4 = await setupStreet(100_000_000, 4); // S4 river
-    sTail = await setupStreet(107_000, 5, 100_000); // tail: 7k buyable (< 12.5k bet)
+    // Mock `remaining` is the POST-debit vault (hook observes post-transfer).
+    // lock 100k everywhere; true remainder R implied per case.
+    sTailBuy = await setupStreet(100_000, 5, 100_000); // R=7k fully taken
+    sTailPartial = await setupStreet(106_000, 6, 100_000); // R=7k, 1k in flight
+    sTailFull = await setupStreet(94_500, 7, 100_000); // R=7k, 12.5k in flight
+    sTailSell = await setupStreet(119_500, 8, 100_000); // sell side
   });
 
   it("S1 buy exact 50k passes", async () => {
@@ -144,8 +150,9 @@ describe("hookasino caps", () => {
   });
 
   it("S1 buy over hold 200k reverts", async () => {
+    // Direct hook call observes the funded balance as-is: 250k > 200k cap.
     const user = Keypair.generate();
-    const dest = await userAta(s1.mint, user, 200_000); // already at cap
+    const dest = await userAta(s1.mint, user, 250_000); // over cap already
     try {
       await check(s1, s1.vault, dest, POOL_AUTHORITY, BET.s1);
       assert.fail("should revert");
@@ -238,12 +245,18 @@ describe("hookasino caps", () => {
     }
   });
 
-  it("TAIL buy exact remainder 7k passes, partial 1k reverts", async () => {
+  it("TAIL buy exact remainder 7k passes", async () => {
     const user = Keypair.generate();
-    const dest = await userAta(sTail.mint, user, 0);
-    await check(sTail, sTail.vault, dest, POOL_AUTHORITY, TOK(7_000));
+    const dest = await userAta(sTailBuy.mint, user, 0);
+    const sig = await check(sTailBuy, sTailBuy.vault, dest, POOL_AUTHORITY, TOK(7_000));
+    assert.isString(sig);
+  });
+
+  it("TAIL buy partial 1k reverts", async () => {
+    const user = Keypair.generate();
+    const dest = await userAta(sTailPartial.mint, user, 0);
     try {
-      await check(sTail, sTail.vault, dest, POOL_AUTHORITY, TOK(1_000));
+      await check(sTailPartial, sTailPartial.vault, dest, POOL_AUTHORITY, TOK(1_000));
       assert.fail("should revert");
     } catch (e: any) {
       assert.include(e.toString(), "InvalidBetSize");
@@ -252,9 +265,9 @@ describe("hookasino caps", () => {
 
   it("TAIL buy full 12.5k bet reverts (does not fit)", async () => {
     const user = Keypair.generate();
-    const dest = await userAta(sTail.mint, user, 0);
+    const dest = await userAta(sTailFull.mint, user, 0);
     try {
-      await check(sTail, sTail.vault, dest, POOL_AUTHORITY, BET.s4);
+      await check(sTailFull, sTailFull.vault, dest, POOL_AUTHORITY, BET.s4);
       assert.fail("should revert");
     } catch (e: any) {
       assert.include(e.toString(), "InvalidBetSize");
@@ -263,10 +276,10 @@ describe("hookasino caps", () => {
 
   it("TAIL sell 12.5k passes, 7k reverts (sells stay exact)", async () => {
     const user = Keypair.generate();
-    const src = await userAta(sTail.mint, user, 100_000);
-    await check(sTail, src, sTail.vault, user.publicKey, BET.s4);
+    const src = await userAta(sTailSell.mint, user, 100_000);
+    await check(sTailSell, src, sTailSell.vault, user.publicKey, BET.s4);
     try {
-      await check(sTail, src, sTail.vault, user.publicKey, TOK(7_000));
+      await check(sTailSell, src, sTailSell.vault, user.publicKey, TOK(7_000));
       assert.fail("should revert");
     } catch (e: any) {
       assert.include(e.toString(), "InvalidBetSize");

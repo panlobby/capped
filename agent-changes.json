@@ -146,6 +146,15 @@
       "files": ["manual-step7pool2.ts (untracked, throwaway)"],
       "details": "Pool GDb8yv3CEBQpsUuthMatW5zMp9RCTiamigpCZjJfN4VZ, mint JBaZd2GNaV5Fmv3UVd4s2SP4bXQ22vWoQqbZdJ4fi2Jk (reused DBC config 8Atj...). vault_0 read live = 1e15 exactly; lock = 232567941009412 stored in 113-byte PDA, verified byte-for-byte. Buy 50k tx 4j3Q4kdfzV3koS6QQiu5iiAsndkJGALCnr5PRoWP9XG8cqvJiTHoGBMdo5pPR5YMJEgg66XkyCtZUDz2Ej3vwLe2, balance exactly 50k.",
       "next": "Tiny #2 (reuse tiny config, lock = vault_0 - 381671616875), full buyout to graduation, verify revocation + DAMM v2 migration."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "Hook reads POST-transfer balances: tiers/tail/hold now evaluate on reconstructed pre-values. 20/20 + 14/14.",
+      "files": ["programs/hook/src/lib.rs", "tests/hook.ts", "docs/limits-architecture.md"],
+      "details": "Token-2022 debits/credits BEFORE the hook CPI (verified in spl-token-2022 6.0.0 processor.rs + live logs: hook saw post-debit vault). Old code judged tiers on post values -> street-boundary buys would revert + tail rule could never pass (take-the-rest observed as lock). Fix: pre = post + amount (buys) / post - amount (sells); tier + tail on pre; hold checks observed (post-credit) dest balance directly. Unit fixtures now encode POST vaults (TAIL 100k/106k/94.5k/119.5k), over-hold dst = cap + bet. Integration: 4 tail ctxs + over-hold funded 250k (direct call sees pre balances). Docs 1.4 corrected.",
+      "next": "User redeploys to devnet, then tiny#2 tail graduation: exact-remainder final buy -> EvtCurveCompleteWithTransferHook -> hook revoked -> manual migrateToDammV2."
     }
   ]
 }

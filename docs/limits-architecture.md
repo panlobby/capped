@@ -6,7 +6,7 @@ pool trades on the curve. Tradable on **any DEX** supporting Token-2022 transfer
 (Meteora UI, Jupiter, fomo.family) — no walled garden, no custom router in v1.
 
 Status: hook implemented (`programs/hook`), 20/20 native Rust unit tests pass
-(`cargo test -p hook`), 13/13 validator integration tests pass (`tests/hook.ts`
+(`cargo test -p hook`), 14/14 validator integration tests pass (`tests/hook.ts`
 via local validator). Curve modeled (`scripts/curve-matrix.ts`, SDK 1.5.13).
 Devnet E2E in progress: transfer-hook config + full-size pool live, street bets
 verified on-chain (50k buy, InvalidBetSize/P2PBlocked rejections, sells, fee claim).
@@ -55,8 +55,12 @@ tokens**. SOL-side discipline comes from `ExactOut` quoting off-chain
 
 ### 1.4 What the hook reads and when
 
-`process_transfer`: accounts `[source, mint, destination, authority, extra...]`,
-hook CPI before balances mutate → pre-transfer balances readable. Token-2022 sets
+`process_transfer`: accounts `[source, mint, destination, authority, extra...]`.
+Token-2022 debits source and credits destination BEFORE the hook CPI, so the
+hook observes POST-transfer balances and reconstructs pre-transfer vault as
+`post + amount` (buys) / `post - amount` (sells). Tiers, tail rule and hold cap
+all evaluate on reconstructed pre-values; the hold cap checks the observed
+(post-credit) destination balance directly. Token-2022 sets
 `TransferHookAccount.transferring = true` on both token accounts around the CPI →
 reliable guard against direct calls (strict path; lenient for unit-test mocks
 lacking the extension).
