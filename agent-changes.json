@@ -47,6 +47,15 @@
       "files": ["manual-step3.ts (untracked, throwaway)"],
       "details": "Pool 7m6GnSPqNJozv7utedVKHRhh2YiUJHH4kRbRvGvAxpWp, baseMint 48EBUqvrN6UPzTC2kHbGqWbKkGYqiziBAM3WAtxdQ6se, tx 4Lg7qqM2hzs5qKx4NnhJXXSNyHbpPrSFabNLMWYaLXu9VGnP8RfyzmqdSw2VaHNcbTnq3gwFHUAMx2XXpmLgsTbD. Verified: discriminator eddbb8172abda923 = TransferHookPool, mint is Token-2022 with supply 1e15 (1B x 1e6) decimals 6, hook program + POOL_AUTHORITY set as transfer-hook authority. Signers for pool creation: payer + baseMint keypair.",
       "next": "Step 4: hook initialize_config(pool) + initialize_extra_account_meta_list for mint 48EBUqvrN6UPzTC2kHbGqWbKkGYqiziBAM3WAtxdQ6se. Must be done BEFORE first swap."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 4 done: hook bound to mint, pool ready for swaps.",
+      "files": ["manual-step4.ts (untracked, throwaway)"],
+      "details": "initializeConfig tx 3tnT5URBRFZ6p2DppfakhLEW6SuwoQ4poZTE6SAUbWd9UNFcdHnRHpK6H1rNf1G8Su49zhXybJBTnfKLKZqdU8Gh, extraMetas tx 4ecjhjERca3LiPBU1Nb6Z3i6xUTQ9D15HZ9prMR1qk1sv8g6ZFStwZ7wDn91KyydGZVfUiJo8SgyLa1MZPfHHS4S4. Config PDA 67yz8gAPeHq5V4ktDjip49rRpenVfV8AxtZV74H589S1 holds authority=AHe1, mint=48EB, pool=7m6G. Extra metas PDA Gabmvb9cbX8MxZpk5TimGSSWWPyaJAWcUSRZ1rdpNVvD exists (86 bytes, hook-owned). Pool #1 fully wired: DBC pool + mint hook + hook config.",
+      "next": "Step 5: test swaps via swap2WithTransferHook (ExactOut buys per street, sell, P2P rejection, fee claim)."
     }
   ]
 }
