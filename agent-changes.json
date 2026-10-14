@@ -9,8 +9,8 @@
       "type": "init",
       "summary": "Initialized git repo (main branch) and created this changelog.",
       "files": [".gitignore", "agent-changes.json"],
-      "details": "Repo was not a git repo. Ran git init -b main. Added standard Anchor/Rust/Node .gitignore. No code changes yet.",
-      "next": "First commit. Then fix anchor build toolchain (cargo 1.84 vs edition2024) to run tests/hook.ts."
+      "details": "Repo was not a git repo. Ran git init -b main. Added standard Anchor/Rust/Node .gitignore. No code changes yet. First commit 793be12 done (14 files, lockfiles left untracked).",
+      "next": "Fix anchor build toolchain (cargo 1.84 vs edition2024) to run tests/hook.ts."
     }
   ]
 }
