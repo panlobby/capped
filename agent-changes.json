@@ -128,6 +128,15 @@
       "files": ["programs/hook/src/lib.rs"],
       "details": "First fallback used a second Anchor struct (HookConfigLegacy) — but Anchor types get distinct discriminators, so real old PDAs (HookConfig discriminator, 105 bytes) failed deser -> WrongConfig -> old pools bricked (caught on devnet pool #1 buy: 0x1773 WrongConfig). Fixed: manual field parse, same discriminator, lock tail defaults to 0. Legacy unit test rewritten to truncate real HookConfig bytes (faithful old-PDA simulation). 20/20 unit + 13/13 integration pass. Deployed binary grew 288448->293280 bytes; programdata extended +50000. Mainnet lesson stands and is now proven: finalize logic before mainnet, upgrades after pools exist are dangerous.",
       "next": "User redeploys fixed build to devnet, then legacy re-test on pool #1, then pool #2 + tiny #2 with lock."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Fixed hook live on devnet; legacy pool #1 works again.",
+      "files": [],
+      "details": "Redeploy tx 5vToH6Wzd3Dim2eFqk6d8ov5zYrcmSTxgPbxjiZYbbEmSryG83tGQho1DVLt6PRHnqZ3Ror2peYQK3oCpmvTcSbV finalized, slot 511082878. Legacy buy 50k on pool #1 passed (tx 3F92vd9FxLsZyoX7AT3jez3MKjVEUDU5C15Cw6BVUTTA7r4tVEqavmQyKWWZvnuFTWyD18zpadFaq3DFqCdacnTD, balance exactly 50k) — manual-parse fallback verified on real old PDA.",
+      "next": "Pool #2 (full-size) + tiny #2 with migration_lock, street re-tests, tail graduation to completion."
     }
   ]
 }
