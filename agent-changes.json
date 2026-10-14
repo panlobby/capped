@@ -74,6 +74,15 @@
       "files": ["manual-step5b.ts (untracked, throwaway)"],
       "details": "Tx 5AJNXYbAsXTJHb19CJaraGbXnH5WFhC1vc62cRJYqku2Nk9cD2RGwtnrpavLRVVoU4w8uZAtGWjEysKjfnVroTnt finalized with InstructionError Custom 6005. Logs: AnchorError at programs/hook/src/lib.rs:193 InvalidBetSize (0x1775), propagated through Token-2022 -> DBC. Hook rejects wrong bet size on live pool, not just in unit tests. Also fixed the snippet to confirmTransaction (skipPreflight sig alone proves nothing).",
       "next": "Step 5c: sell 50k (expect pass), P2P transfer (expect P2PBlocked), claimPartnerTradingFee2."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 5c done: P2P blocked, sell passes, balance back to 0.",
+      "files": ["manual-step5c.ts (untracked, throwaway)"],
+      "details": "Buy 50k tx 4hwJQ5FJ7wvwhME8WfPSbXwpRDrTktjVRvGHQaPkM3EdzYxzjpvLbZXQYEv2drYtDTHnnPz1BbLE7q2NBFbRhVMD. P2P 50k reverted with P2PBlocked (0x1777) at lib.rs:179 via hook CPI — required transferCheckedWithTransferHook (plain transferChecked fails early with MissingAccount, never reaches hook). Sell 50k tx 3C9aug7P1Skw7oa59FRxotQ9iGfJ5YyuiXL1wdX72Eb8urfzy5NQMSnCMa8PWcMSL2PUDEfR861cAKfh7ApwpAVQ, final balance 0. Note: devnet public RPC 429s under load, SDK retries handle it.",
+      "next": "Step 5d: claimPartnerTradingFee2 (fee check). Then step 6: tiny pool for graduation test."
     }
   ]
 }
