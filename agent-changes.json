@@ -110,6 +110,15 @@
       "files": [],
       "details": "Tiny pool stuck at reserve 2.438/2.581 SOL: ExactOut 12.5k and 10k quote FAIL (Not enough liquidity), 5k OK — remaining buyable is 5-10k tokens, unbuyable with == 12.5k bets. Main pool same disease: buyable = 767432058990588 raw (767,432,058.99 tokens), buyable % 12.5k = 7058990588 raw (~7,059 tokens tail). So main pool can NEVER graduate either — not 'almost unreachable' (docs 3/7.6) but literally unreachable. Funds not locked (sells always work). Options: (a) switch hook to <= (one-line + tests; tail becomes buyable, fomo ExactIn UX fixed too — docs 7.1 already recommended); (b) keep == and calibrate supply so buyable % bet == 0 (fragile); (c) accept permanent lock explicitly. Graduation mechanics test needs either (a) or a calibrated tiny pool #2.",
       "next": "User decision: == vs <= vs accept-lock. Then either redeploy hook with <= or spin calibrated tiny pool #2."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "feature",
+      "summary": "Implemented: new holds, vault-scale thresholds, tail rule with migration_lock. 20/20 + 13/13 pass.",
+      "files": ["programs/hook/src/lib.rs", "tests/hook.ts", "docs/limits-architecture.md"],
+      "details": "Holds 200k/1M/5M/20M. Thresholds 950M/850M/600M (vault scale; old 717/617/367M assumed buyable scale — streets lagged: S1 lasted till sold 283M instead of 50M). HookConfig.migration_lock appended last (space 105->113); initialize_config requires lock>0; pre-upgrade PDAs fall back to lock=0 strict-== (no bricking). Tail: buys with vault-lock<bet must take exact remainder; sells strict. 6 new unit tests (tail pass/partial/full-bet/over-hold/sell-exact/legacy-strict), 3 new integration tests (tail ctx lock=100k+7k). anchor build OK, local validator 13/13 via bun mocha. Next: redeploy hook to devnet + recreate pools with lock (lock_main = vault_0 - buyable_0 = 1e15 - 767432058990588 = 232567941009412 raw), then finish tiny#2 graduation test.",
+      "next": "Redeploy hook to devnet (upgrade, same program id). Recreate main pool #2 + tiny #2 with migration_lock. Re-run street tests + tail graduation."
     }
   ]
 }

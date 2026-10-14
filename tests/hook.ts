@@ -38,7 +38,8 @@ describe("hookasino caps", () => {
 
   async function setupStreet(
     remainingTokens: number,
-    seed: number
+    seed: number,
+    lockTokens: number = 1
   ): Promise<StreetCtx> {
     // Throwaway SPL mint stands in for the Token-2022 base mint (only key is checked).
     const mint = await createMint(provider.connection, payer, payer.publicKey, null, 6);
@@ -59,7 +60,7 @@ describe("hookasino caps", () => {
       .accounts({ authority: payer.publicKey, mockPool: pool })
       .rpc();
     await program.methods
-      .initializeConfig(pool)
+      .initializeConfig(pool, new BN(lockTokens).mul(U))
       .accounts({ authority: payer.publicKey, mint, config })
       .rpc();
     const vaultAcc = await getOrCreateAssociatedTokenAccount(
@@ -114,13 +115,14 @@ describe("hookasino caps", () => {
       .rpc();
   }
 
-  let s1: StreetCtx, s2: StreetCtx, s3: StreetCtx, s4: StreetCtx;
+  let s1: StreetCtx, s2: StreetCtx, s3: StreetCtx, s4: StreetCtx, sTail: StreetCtx;
 
   before(async () => {
-    s1 = await setupStreet(800_000_000, 1); // S1: >750M
-    s2 = await setupStreet(700_000_000, 2); // S2
-    s3 = await setupStreet(500_000_000, 3); // S3
+    s1 = await setupStreet(990_000_000, 1); // S1: >950M
+    s2 = await setupStreet(900_000_000, 2); // S2
+    s3 = await setupStreet(700_000_000, 3); // S3
     s4 = await setupStreet(100_000_000, 4); // S4 river
+    sTail = await setupStreet(107_000, 5, 100_000); // tail: 7k buyable (< 12.5k bet)
   });
 
   it("S1 buy exact 50k passes", async () => {
@@ -233,6 +235,41 @@ describe("hookasino caps", () => {
       assert.fail("should revert");
     } catch (e: any) {
       assert.include(e.toString(), "P2PBlocked");
+    }
+  });
+
+  it("TAIL buy exact remainder 7k passes, partial 1k reverts", async () => {
+    const user = Keypair.generate();
+    const dest = await userAta(sTail.mint, user, 0);
+    await check(sTail, sTail.vault, dest, POOL_AUTHORITY, TOK(7_000));
+    try {
+      await check(sTail, sTail.vault, dest, POOL_AUTHORITY, TOK(1_000));
+      assert.fail("should revert");
+    } catch (e: any) {
+      assert.include(e.toString(), "InvalidBetSize");
+    }
+  });
+
+  it("TAIL buy full 12.5k bet reverts (does not fit)", async () => {
+    const user = Keypair.generate();
+    const dest = await userAta(sTail.mint, user, 0);
+    try {
+      await check(sTail, sTail.vault, dest, POOL_AUTHORITY, BET.s4);
+      assert.fail("should revert");
+    } catch (e: any) {
+      assert.include(e.toString(), "InvalidBetSize");
+    }
+  });
+
+  it("TAIL sell 12.5k passes, 7k reverts (sells stay exact)", async () => {
+    const user = Keypair.generate();
+    const src = await userAta(sTail.mint, user, 100_000);
+    await check(sTail, src, sTail.vault, user.publicKey, BET.s4);
+    try {
+      await check(sTail, src, sTail.vault, user.publicKey, TOK(7_000));
+      assert.fail("should revert");
+    } catch (e: any) {
+      assert.include(e.toString(), "InvalidBetSize");
     }
   });
 });

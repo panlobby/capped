@@ -5,10 +5,11 @@ Goal: a token where every trade is a bet of a **pre-defined size**, like limit h
 pool trades on the curve. Tradable on **any DEX** supporting Token-2022 transfer hooks
 (Meteora UI, Jupiter, fomo.family) — no walled garden, no custom router in v1.
 
-Status: hook implemented (`programs/hook`), 14/14 native Rust unit tests pass
-(`cargo test -p hook`). Curve modeled (`scripts/curve-matrix.ts`, SDK 1.5.13).
-`anchor build` blocked by old platform toolchain (cargo 1.84 vs edition2024 crates) —
-validator integration tests (`tests/hook.ts`) written but not yet run.
+Status: hook implemented (`programs/hook`), 20/20 native Rust unit tests pass
+(`cargo test -p hook`), 13/13 validator integration tests pass (`tests/hook.ts`
+via local validator). Curve modeled (`scripts/curve-matrix.ts`, SDK 1.5.13).
+Devnet E2E in progress: transfer-hook config + full-size pool live, street bets
+verified on-chain (50k buy, InvalidBetSize/P2PBlocked rejections, sells, fee claim).
 
 ---
 
@@ -88,26 +89,33 @@ no base referral transfers to handle.
 ## 2. Streets (final numbers)
 
 Supply: **1B, 6 decimals. 767.4M buyable + ~233M (23%) to migration.**
-`UNIT = 12,500` tokens. Thresholds keyed off pool `base_remaining`
-(`base_reserve` at offset 232 in `VirtualPool`/`TransferHookPool`).
+`UNIT = 12,500` tokens. Thresholds keyed off pool `base_remaining` — the VAULT
+balance (full supply at launch, **not** buyable: vault_0 = 1B; ~233M stays locked
+for migration). Verified on devnet: vault tracks `supply - sold` exactly.
 
 | street | sold range | supply | bet (exact) | hold/wallet | tx to clear |
 |---|---|---|---|---|---|
 | S1 preflop | 0→50M | 50M | 50k (4U) | 200k (16U) | 1,000 (250×4) |
-| S2 flop | 50→150M | 100M | 50k (4U) | 400k (32U) | 2,000 |
-| S3 turn | 150→400M | 250M | 25k (2U) | 1M (80U) | 10,000 |
-| S4 river | 400M→migrate | ~367M | 12.5k (1U) | 2M (160U) | ~29,000 |
+| S2 flop | 50→150M | 100M | 50k (4U) | 1M (80U) | 2,000 |
+| S3 turn | 150→400M | 250M | 25k (2U) | 5M (400U) | 10,000 |
+| S4 river | 400M→migrate | ~367M | 12.5k (1U) | 20M (1,600U) | ~29,000 |
 | total | | ~767M | | | ~42–46k |
 
-Remaining thresholds in code: `REMAIN_S1_MIN = 717M`, `S2 = 617M`, `S3 = 367M`
-(tokens → ×1e6 base units). Max bag 2M = 0.2% supply (whale needs 200+ wallets
-for the river).
+Remaining thresholds in code (vault scale): `REMAIN_S1_MIN = 950M`, `S2 = 850M`,
+`S3 = 600M` (tokens → ×1e6 base units). Holds rise monotonically (0.02% / 0.1% /
+0.5% / 2%) so existing holders are never bricked by a street change.
+Max bag 20M = 2% supply.
 
 Hook checks per transfer: `amount == tier.bet` else `InvalidBetSize`;
 on buy `destination.amount + amount <= tier.hold` else `ExceedsHold`.
-
-Open: `==` exact vs `<=` max — `<=` recommended for fomo `ExactIn` UX
-(dust always passes; oversize still reverts). Currently implemented as `==`.
+Tail exception (buys only): `HookConfig.migration_lock` = base units locked for
+migration (`vault_0 - buyable_0`, computed off-chain at pool creation, required
+> 0). When `vault - lock < bet`, the only legal buy takes the exact remainder
+(`amount == vault - lock`); sells stay exact. Without a lock (pre-upgrade
+accounts) the hook stays strict `==` forever. Rationale: buyable is never an
+exact multiple of the bet (main pool leaves a ~7,059-token tail), so strict `==`
+makes graduation mathematically impossible; the tail rule restores
+possible-but-hard graduation while keeping chip discipline on 99.99% of the curve.
 
 ---
 
@@ -177,9 +185,16 @@ at 12.5k and grow holds only.
 
 ## 7. Remaining decisions / risks
 
-1. Bet `==` exact vs `<=` max (recommend `<=`; one-line change + tests).
+1. Bet `==` exact vs `<=` max — DECIDED: hybrid. Strict `==` everywhere,
+   except the tail (`vault - migration_lock < bet`): buys take the exact
+   remainder, sells stay exact (implemented, 20/20 unit + 13/13 integration pass).
+   Mid-curve fomo `ExactIn` dust still reverts — accepted (separate UX issue).
 2. Accept S1 dust preflop (structural, see §3) vs raise S1 bet/start mcap.
-3. Upgrade authority policy (deployer → multisig/immutable timing).
+3. Upgrade authority policy (deployer → multisig/immutable timing). NOTE from
+   devnet: HookConfig layout changes brick old pools' PDAs (deserialization
+   fails → all transfers revert, funds stuck). A legacy fallback (lock = 0,
+   strict ==) exists for pre-upgrade accounts, but rule stands: finalize hook
+   logic BEFORE mainnet, then lock. Upgrading after pools exist is dangerous.
 4. `migrationFee` percentages consistency check at config build
    (FixedBps25 option + creator 0%).
 5. Devnet end-to-end: deploy hook → mint → transfer-hook config/pool → real

@@ -15,17 +15,22 @@ pub const BET_S1: u64 = 50_000_000_000;
 pub const BET_S2: u64 = 50_000_000_000;
 pub const BET_S3: u64 = 25_000_000_000;
 pub const BET_S4: u64 = 12_500_000_000;
-// Hold caps per street (base units): 200k / 400k / 1M / 2M
+// Hold caps per street (base units): 200k / 1M / 5M / 20M (0.02% / 0.1% / 0.5% / 2%).
+// Rising schedule: existing holders are never bricked by a street change.
 pub const HOLD_S1: u64 = 200_000_000_000;
-pub const HOLD_S2: u64 = 400_000_000_000;
-pub const HOLD_S3: u64 = 1_000_000_000_000;
-pub const HOLD_S4: u64 = 2_000_000_000_000;
+pub const HOLD_S2: u64 = 1_000_000_000_000;
+pub const HOLD_S3: u64 = 5_000_000_000_000;
+pub const HOLD_S4: u64 = 20_000_000_000_000;
 // Street thresholds in pool base_remaining (base units).
-// Curve: 767.4M buyable (100k SOL / $10M migration, gentle-fib weights).
+// base_remaining tracks the VAULT balance (full supply at launch), not buyable:
 // S1 while sold < 50M, S2 < 150M, S3 < 400M, else S4 river to migrate.
-pub const REMAIN_S1_MIN: u64 = 717_000_000_000_000;
-pub const REMAIN_S2_MIN: u64 = 617_000_000_000_000;
-pub const REMAIN_S3_MIN: u64 = 367_000_000_000_000;
+// (vault_0 = 1B supply; buyable is 767.4M, ~233M stays locked for migration.)
+pub const REMAIN_S1_MIN: u64 = 950_000_000_000_000;
+pub const REMAIN_S2_MIN: u64 = 850_000_000_000_000;
+pub const REMAIN_S3_MIN: u64 = 600_000_000_000_000;
+// Byte size of HookConfig account data, legacy (no migration_lock) and current.
+pub const CONFIG_LEN_LEGACY: usize = 8 + 32 + 32 + 32 + 1;
+pub const CONFIG_LEN: usize = CONFIG_LEN_LEGACY + 8;
 
 /// DBC pool authority PDA (same for all Meteora DBC pools).
 pub const POOL_AUTHORITY: Pubkey = pubkey!("FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM");
@@ -38,13 +43,26 @@ pub mod hook {
     use super::*;
 
     /// Create config PDA ["config", mint]. Pool can be updated later via set_pool.
-    pub fn initialize_config(ctx: Context<InitializeConfig>, pool: Pubkey) -> Result<()> {
+    /// migration_lock = base units locked for DAMM migration (vault_0 - buyable_0,
+    /// computed off-chain at pool creation). Powers the tail rule; must be > 0.
+    pub fn initialize_config(
+        ctx: Context<InitializeConfig>,
+        pool: Pubkey,
+        migration_lock: u64,
+    ) -> Result<()> {
+        require!(migration_lock > 0, ErrorCode::InvalidLock);
         let config = &mut ctx.accounts.config;
         config.authority = ctx.accounts.authority.key();
         config.mint = ctx.accounts.mint.key();
         config.pool = pool;
         config.bump = ctx.bumps.config;
-        msg!("config init mint={} pool={}", config.mint, config.pool);
+        config.migration_lock = migration_lock;
+        msg!(
+            "config init mint={} pool={} lock={}",
+            config.mint,
+            config.pool,
+            config.migration_lock
+        );
         Ok(())
     }
 
@@ -158,12 +176,23 @@ fn execute_checks(
         Pubkey::find_program_address(&[b"config", mint.key.as_ref()], program_id);
     require_keys_eq!(config_ai.key(), expect_config, ErrorCode::WrongConfig);
     require_keys_eq!(*config_ai.owner, *program_id, ErrorCode::WrongConfig);
-    let config: HookConfig = HookConfig::try_deserialize(&mut &config_ai.data.borrow()[..])
-        .map_err(|_| ErrorCode::WrongConfig)?;
-    require_keys_eq!(config.mint, mint.key(), ErrorCode::WrongConfig);
+    // New layout carries migration_lock; pre-upgrade accounts fall back to lock 0
+    // (strict == forever — old pools keep working exactly as before).
+    let raw = config_ai.data.borrow();
+    let (cfg_mint, cfg_pool, migration_lock) = if raw.len() >= CONFIG_LEN {
+        let cfg = HookConfig::try_deserialize(&mut &raw[..])
+            .map_err(|_| ErrorCode::WrongConfig)?;
+        (cfg.mint, cfg.pool, cfg.migration_lock)
+    } else {
+        let cfg = HookConfigLegacy::try_deserialize(&mut &raw[..])
+            .map_err(|_| ErrorCode::WrongConfig)?;
+        (cfg.mint, cfg.pool, 0u64)
+    };
+    drop(raw);
+    require_keys_eq!(cfg_mint, mint.key(), ErrorCode::WrongConfig);
     // 3. Pool must be the static pool from config.
-    require_keys_eq!(pool_ai.key(), config.pool, ErrorCode::WrongPool);
-    require!(config.pool != Pubkey::default(), ErrorCode::PoolNotSet);
+    require_keys_eq!(pool_ai.key(), cfg_pool, ErrorCode::WrongPool);
+    require!(cfg_pool != Pubkey::default(), ErrorCode::PoolNotSet);
 
     // 4. Parse token accounts (owner + pre-transfer amount).
     let (src_owner, _src_amount) = parse_token_account(source)?;
@@ -185,12 +214,23 @@ fn execute_checks(
         ErrorCode::InvalidDirection
     );
 
-    // 7. Tier from pool base_remaining.
+    // 7. Tier from pool base_remaining (vault balance scale).
     let remaining = read_base_reserve(pool_ai)?;
     let (bet, hold) = tier_for(remaining);
+    // Buyable remainder after the migration lock. Vault never drops below the
+    // lock (locked tokens are not for sale), so underflow means bad data.
+    let remainder = remaining
+        .checked_sub(migration_lock)
+        .ok_or(ErrorCode::InvalidPool)?;
 
-    // 8. Exact bet both directions; hold cap on buys.
-    require!(amount > 0 && amount == bet, ErrorCode::InvalidBetSize);
+    // 8. Bet size. Exact street bet, except the tail: when less than one bet
+    // is left buyable, the only legal buy takes the exact remainder.
+    // Sells always stay exact (they grow the vault, never drain it).
+    if src_is_pool && migration_lock > 0 && remainder < bet {
+        require!(amount > 0 && amount == remainder, ErrorCode::InvalidBetSize);
+    } else {
+        require!(amount > 0 && amount == bet, ErrorCode::InvalidBetSize);
+    }
     if src_is_pool {
         // Buy: vault -> user. Authority must be pool authority (DBC signs).
         require_keys_eq!(authority.key(), POOL_AUTHORITY, ErrorCode::Unauthorized);
@@ -200,7 +240,10 @@ fn execute_checks(
         // Sell: user -> vault. Authority must own source (no delegates).
         require_keys_eq!(authority.key(), src_owner, ErrorCode::Unauthorized);
     }
-    msg!("street ok remaining={} bet={} hold={}", remaining, bet, hold);
+    msg!(
+        "street ok remaining={} bet={} hold={} lock={}",
+        remaining, bet, hold, migration_lock
+    );
     Ok(())
 }
 
@@ -283,6 +326,19 @@ pub struct HookConfig {
     pub mint: Pubkey,
     pub pool: Pubkey,
     pub bump: u8,
+    /// Base units locked for DAMM migration. Appended last: pre-upgrade accounts
+    /// (105 bytes) deserialize via HookConfigLegacy with lock treated as 0
+    /// (strict == forever, old behavior preserved).
+    pub migration_lock: u64,
+}
+
+/// Pre-upgrade config layout (no migration_lock). Read-only fallback.
+#[account]
+pub struct HookConfigLegacy {
+    pub authority: Pubkey,
+    pub mint: Pubkey,
+    pub pool: Pubkey,
+    pub bump: u8,
 }
 
 /// Test-only helper: mock pool holding base_remaining for tier tests.
@@ -301,7 +357,7 @@ pub struct InitializeConfig<'info> {
     #[account(
         init,
         payer = authority,
-        space = 8 + 32 + 32 + 32 + 1,
+        space = CONFIG_LEN,
         seeds = [b"config", mint.key().as_ref()],
         bump
     )]
@@ -405,6 +461,8 @@ pub enum ErrorCode {
     ExtraMetasInitFailed,
     #[msg("math overflow")]
     MathOverflow,
+    #[msg("migration lock must be greater than zero")]
+    InvalidLock,
 }
 
 // Silence unused import if interface version re-exports differ.
@@ -442,8 +500,21 @@ mod tests {
         d
     }
 
-    fn config_data(authority: &Pubkey, mint: &Pubkey, pool: &Pubkey) -> Vec<u8> {
+    fn config_data(authority: &Pubkey, mint: &Pubkey, pool: &Pubkey, lock: u64) -> Vec<u8> {
         let cfg = HookConfig {
+            authority: *authority,
+            mint: *mint,
+            pool: *pool,
+            bump: 255,
+            migration_lock: lock,
+        };
+        let mut d = Vec::new();
+        cfg.try_serialize(&mut d).unwrap();
+        d
+    }
+
+    fn legacy_config_data(authority: &Pubkey, mint: &Pubkey, pool: &Pubkey) -> Vec<u8> {
+        let cfg = HookConfigLegacy {
             authority: *authority,
             mint: *mint,
             pool: *pool,
@@ -472,7 +543,7 @@ mod tests {
     }
 
     impl Fixture {
-        fn new(remaining: u64, src_owner: Pubkey, src_amount: u64, dst_owner: Pubkey, dst_amount: u64, mock_pool: bool) -> Self {
+        fn new(remaining: u64, src_owner: Pubkey, src_amount: u64, dst_owner: Pubkey, dst_amount: u64, mock_pool: bool, lock: u64) -> Self {
             let program_id = crate::ID;
             let mint = key(10);
             let (extra_list, _) = Pubkey::find_program_address(
@@ -491,7 +562,7 @@ mod tests {
                 src_data: token_data(&src_owner, src_amount),
                 dst_data: token_data(&dst_owner, dst_amount),
                 pool_data_v: if mock_pool { mock_pool_data(remaining) } else { pool_data(remaining) },
-                cfg_data: config_data(&key(30), &mint, &pool_key),
+                cfg_data: config_data(&key(30), &mint, &pool_key, lock),
                 src_lamports: 0,
                 dst_lamports: 0,
                 pool_lamports: 0,
@@ -561,28 +632,31 @@ mod tests {
         }
     }
 
-    const S1_REM: u64 = 760_000_000_000_000;
-    const S2_REM: u64 = 650_000_000_000_000;
-    const S3_REM: u64 = 500_000_000_000_000;
+    const S1_REM: u64 = 990_000_000_000_000;
+    const S2_REM: u64 = 900_000_000_000_000;
+    const S3_REM: u64 = 700_000_000_000_000;
     const S4_REM: u64 = 100_000_000_000_000;
+    // Tail zone: lock 100k tokens, 7k tokens buyable (< BET_S4).
+    const TAIL_LOCK: u64 = 100_000_000_000;
+    const TAIL_REM: u64 = 107_000_000_000;
 
     #[test]
     fn tier_selection() {
-        assert_eq!(tier_for(767_000_000_000_000), (BET_S1, HOLD_S1));
-        assert_eq!(tier_for(717_000_000_000_001), (BET_S1, HOLD_S1));
-        assert_eq!(tier_for(717_000_000_000_000), (BET_S2, HOLD_S2));
-        assert_eq!(tier_for(617_000_000_000_001), (BET_S2, HOLD_S2));
-        assert_eq!(tier_for(617_000_000_000_000), (BET_S3, HOLD_S3));
-        assert_eq!(tier_for(367_000_000_000_001), (BET_S3, HOLD_S3));
-        assert_eq!(tier_for(367_000_000_000_000), (BET_S4, HOLD_S4));
+        assert_eq!(tier_for(990_000_000_000_000), (BET_S1, HOLD_S1));
+        assert_eq!(tier_for(950_000_000_000_001), (BET_S1, HOLD_S1));
+        assert_eq!(tier_for(950_000_000_000_000), (BET_S2, HOLD_S2));
+        assert_eq!(tier_for(850_000_000_000_001), (BET_S2, HOLD_S2));
+        assert_eq!(tier_for(850_000_000_000_000), (BET_S3, HOLD_S3));
+        assert_eq!(tier_for(600_000_000_000_001), (BET_S3, HOLD_S3));
+        assert_eq!(tier_for(600_000_000_000_000), (BET_S4, HOLD_S4));
         assert_eq!(tier_for(0), (BET_S4, HOLD_S4));
     }
 
     #[test]
     fn pool_layouts_agree() {
         // Real DBC offset layout and Anchor-mock layout must give same tier.
-        let f_real = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, false);
-        let f_mock = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, true);
+        let f_real = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, false, 0);
+        let f_mock = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         let mut fr = f_real;
         let mut fm = f_mock;
         assert!(fr.run(POOL_AUTHORITY, BET_S3).is_ok());
@@ -591,54 +665,54 @@ mod tests {
 
     #[test]
     fn s1_buy_exact_passes() {
-        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 1_000_000_000_000_000, key(60), 0, true);
+        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 1_000_000_000_000_000, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S1).is_ok());
     }
 
     #[test]
     fn s1_buy_wrong_size_reverts() {
-        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), 0, true);
+        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         let err = f.run(POOL_AUTHORITY, 30_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
     fn s1_buy_over_hold_reverts() {
-        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), HOLD_S1, true);
+        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), HOLD_S1, true, 0);
         let err = f.run(POOL_AUTHORITY, BET_S1).unwrap_err();
         assert_eq!(err, ErrorCode::ExceedsHold.into());
     }
 
     #[test]
     fn s1_buy_wrong_authority_reverts() {
-        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), 0, true);
+        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         let err = f.run(key(60), BET_S1).unwrap_err();
         assert_eq!(err, ErrorCode::Unauthorized.into());
     }
 
     #[test]
     fn s2_buy_50k_passes_25k_reverts() {
-        let mut f = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(60), 0, true);
+        let mut f = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S2).is_ok());
-        let mut f2 = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(61), 0, true);
+        let mut f2 = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
         let err = f2.run(POOL_AUTHORITY, BET_S3).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
     fn s3_buy_25k_passes_50k_reverts() {
-        let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, true);
+        let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S3).is_ok());
-        let mut f2 = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(61), 0, true);
+        let mut f2 = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
         let err = f2.run(POOL_AUTHORITY, BET_S1).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
     fn s4_buy_12_5k_passes_25k_reverts() {
-        let mut f = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(60), 0, true);
+        let mut f = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S4).is_ok());
-        let mut f2 = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(61), 0, true);
+        let mut f2 = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
         let err = f2.run(POOL_AUTHORITY, BET_S3).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
@@ -646,9 +720,9 @@ mod tests {
     #[test]
     fn s1_sell_exact_passes_wrong_reverts() {
         let user = key(60);
-        let mut f = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true);
+        let mut f = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, 0);
         assert!(f.run(user, BET_S1).is_ok());
-        let mut f2 = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true);
+        let mut f2 = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, 0);
         let err = f2.run(user, 30_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
@@ -656,16 +730,99 @@ mod tests {
     #[test]
     fn sell_with_delegate_reverts() {
         let user = key(60);
-        let mut f = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true);
+        let mut f = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, 0);
         let err = f.run(key(61), BET_S1).unwrap_err();
         assert_eq!(err, ErrorCode::Unauthorized.into());
     }
 
     #[test]
     fn p2p_blocked() {
-        let mut f = Fixture::new(S4_REM, key(60), 100_000_000_000, key(61), 0, true);
+        let mut f = Fixture::new(S4_REM, key(60), 100_000_000_000, key(61), 0, true, 0);
         let err = f.run(key(60), BET_S4).unwrap_err();
         assert_eq!(err, ErrorCode::P2PBlocked.into());
+    }
+
+    #[test]
+    fn tail_buy_remainder_passes() {
+        // 7k buyable (< BET_S4): the only legal buy takes the exact remainder.
+        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        assert!(f.run(POOL_AUTHORITY, 7_000_000_000).is_ok());
+    }
+
+    #[test]
+    fn tail_buy_partial_reverts() {
+        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        let err = f.run(POOL_AUTHORITY, 1_000_000_000).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn tail_buy_full_bet_reverts() {
+        // Remainder is smaller than the bet: a full bet no longer fits.
+        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        let err = f.run(POOL_AUTHORITY, BET_S4).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn tail_buy_over_hold_reverts() {
+        let mut f = Fixture::new(TAIL_REM, POOL_AUTHORITY, 0, key(60), HOLD_S4, true, TAIL_LOCK);
+        let err = f.run(POOL_AUTHORITY, 7_000_000_000).unwrap_err();
+        assert_eq!(err, ErrorCode::ExceedsHold.into());
+    }
+
+    #[test]
+    fn tail_sell_stays_exact() {
+        // Sells never get the tail exception: exact bet passes, remainder reverts.
+        let user = key(60);
+        let mut f = Fixture::new(TAIL_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
+        assert!(f.run(user, BET_S4).is_ok());
+        let mut f2 = Fixture::new(TAIL_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
+        let err = f2.run(user, 7_000_000_000).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn legacy_no_lock_stays_strict() {
+        // Pre-upgrade config (no lock field): tail-sized buy still reverts.
+        let program_id = crate::ID;
+        let mint = key(10);
+        let (extra_list, _) = Pubkey::find_program_address(
+            &[b"extra-account-metas", mint.as_ref()],
+            &program_id,
+        );
+        let (config_key, _) =
+            Pubkey::find_program_address(&[b"config", mint.as_ref()], &program_id);
+        let pool_key = key(20);
+        let mut src_data = token_data(&POOL_AUTHORITY, 0);
+        let mut dst_data = token_data(&key(60), 0);
+        let mut pool_data_v = mock_pool_data(TAIL_REM);
+        let mut cfg_data = legacy_config_data(&key(30), &mint, &pool_key);
+        assert_eq!(cfg_data.len(), CONFIG_LEN_LEGACY);
+        let (mut a, mut b, mut c, mut d, mut e, mut g, mut h) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+        let (mut md, mut ed, mut ad) = (vec![], vec![], vec![]);
+        let src_key = key(40);
+        let dst_key = key(41);
+        let auth_key = POOL_AUTHORITY;
+        let o50 = key(50);
+        let o51 = key(51);
+        let o52 = key(52);
+        let o53 = key(53);
+        let o54 = key(54);
+        let o55 = key(55);
+        let src_ai = AccountInfo::new(&src_key, false, true, &mut a, &mut src_data, &o50, false, Epoch::default());
+        let mint_ai = AccountInfo::new(&mint, false, false, &mut b, &mut md, &o51, false, Epoch::default());
+        let dst_ai = AccountInfo::new(&dst_key, false, true, &mut c, &mut dst_data, &o52, false, Epoch::default());
+        let auth_ai = AccountInfo::new(&auth_key, false, false, &mut d, &mut ad, &o53, false, Epoch::default());
+        let extra_ai = AccountInfo::new(&extra_list, false, false, &mut e, &mut ed, &o54, false, Epoch::default());
+        let cfg_ai = AccountInfo::new(&config_key, false, false, &mut g, &mut cfg_data, &program_id, false, Epoch::default());
+        let pool_ai = AccountInfo::new(&pool_key, false, false, &mut h, &mut pool_data_v, &o55, false, Epoch::default());
+        let err = execute_checks(
+            &src_ai, &mint_ai, &dst_ai, &auth_ai, &extra_ai, &cfg_ai, &pool_ai,
+            7_000_000_000, &program_id, false,
+        )
+        .unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
@@ -684,7 +841,7 @@ mod tests {
         let mut src_data = token_data(&POOL_AUTHORITY, 0);
         let mut dst_data = token_data(&key(60), 0);
         let mut pool_data_v = mock_pool_data(S1_REM);
-        let mut cfg_data = config_data(&key(30), &mint, &pool_key);
+        let mut cfg_data = config_data(&key(30), &mint, &pool_key, 0);
         let (mut a, mut b, mut c, mut d, mut e, mut g, mut h) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
         let (mut md, mut ed, mut ad) = (vec![], vec![], vec![]);
         let src_key = key(40);
