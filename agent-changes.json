@@ -83,6 +83,15 @@
       "files": ["manual-step5c.ts (untracked, throwaway)"],
       "details": "Buy 50k tx 4hwJQ5FJ7wvwhME8WfPSbXwpRDrTktjVRvGHQaPkM3EdzYxzjpvLbZXQYEv2drYtDTHnnPz1BbLE7q2NBFbRhVMD. P2P 50k reverted with P2PBlocked (0x1777) at lib.rs:179 via hook CPI — required transferCheckedWithTransferHook (plain transferChecked fails early with MissingAccount, never reaches hook). Sell 50k tx 3C9aug7P1Skw7oa59FRxotQ9iGfJ5YyuiXL1wdX72Eb8urfzy5NQMSnCMa8PWcMSL2PUDEfR861cAKfh7ApwpAVQ, final balance 0. Note: devnet public RPC 429s under load, SDK retries handle it.",
       "next": "Step 5d: claimPartnerTradingFee2 (fee check). Then step 6: tiny pool for graduation test."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Devnet step 5d done: partner fee claim works.",
+      "files": ["manual-step5d.ts (untracked, throwaway)"],
+      "details": "Claim tx 35BUCbKfu16yvEFmBXrsmLKi7eNbgEXeXNY4U15xxYgTGawUSv7ZLU38dwopYtR75sNt8YEH1TPo8sPNKCe4jA1d. Balance +~0.00002 SOL net of tx fee — matches ~0.20% of the tiny test volume (~0.008 SOL). claimPartnerTradingFee2 path verified with receiver=feeClaimer=wallet.",
+      "next": "Step 6: tiny pool (config + pool, ~500k supply, ~2-3 SOL threshold), buy out to graduation, verify hook revocation + DAMM v2 migration."
     }
   ]
 }
