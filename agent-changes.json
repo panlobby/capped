@@ -290,6 +290,39 @@
       ],
       "details": "Deleted 13 untracked manual-step*.ts devnet throwaways (devnet phase done; manual scripts now stale vs new initializeConfig IDL anyway). Standardized on bun: bun.lock tracked, package-lock.json gitignored (both were untracked). Added minimal CI (cargo test -p hook --locked on push/PR). migrations/deploy.ts left as anchor scaffold. Reminder: back up target/deploy/hook-keypair.json off-machine (gitignored, upgrade authority).",
       "next": "Metadata (name/symbol/uri+image), upgrade-authority decision (§7.3), mainnet runbook (atomic launch bundle)."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "finding",
+      "summary": "Post-hardening review: logged <240-byte MockPool bypass nuance in initialize_config and execute_checks.",
+      "files": [
+        "agent-changes.json"
+      ],
+      "details": "In initialize_config (lib.rs:98) and execute_checks (lib.rs:251, 284, 322), DBC owner, discriminator, creator==authority, and base_vault checks are guarded by `if data.len() >= BASE_RESERVE_OFFSET + 8` (240 bytes) to keep 16-byte MockPool tests working. Because init_mock_pool is still compiled into the binary and 0-byte or 16-byte pool accounts skip the `creator == authority` check in initialize_config, a non-atomic launch could still be front-run by passing a <240-byte account as `pool` to brick the mint's config PDA. Mitigations before mainnet: (1) always bundle createPoolWithTransferHook + initialize_config + initialize_extra_account_meta_list atomically in a single tx/bundle; (2) optionally gate init_mock_pool and `< 240`-byte branches behind `#[cfg(feature = \"local-test\")]` so the mainnet build unconditionally requires `data.len() >= BASE_RESERVE_OFFSET + 8`.",
+      "next": "Decide whether to feature-gate MockPool (<240B) before mainnet build; write atomic mainnet launch script in scripts/."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "decision",
+      "summary": "Correction to entry 23 + mock-bypass decision: feature-gate mocks (local-test).",
+      "files": [
+        "agent-changes.json"
+      ],
+      "details": "Correction: entry 23 states vault check as post+amount==R / post-amount==R; entry 24 supersedes it (vault_post == reserve directly, reserve is POST at hook time). Entry 25 (other author) mock-bypass nuance confirmed valid. DECIDED with user: feature-gate init_mock_pool, MockPool, and all <240B mock branches behind #[cfg(feature = 'local-test')]; mainnet build (plain anchor build) unconditionally requires full-size DBC pools with owner/disc/creator/base_mint/base_vault checks. Tests run with --features local-test. Residual front-run (attacker with own real DBC pool) still covered only by atomic launch bundle.",
+      "next": "Implement feature-gate in lib.rs + tests, re-run 31/31 (with feature) and 14/14, rebuild mainnet binary without feature."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "plan",
+      "summary": "Mainnet checklist with owners; devnet journal closed.",
+      "files": [
+        "agent-changes.json"
+      ],
+      "details": "Remaining before mainnet: (1) feature-gate mocks (agent: opencode); (2) metadata name/symbol/uri+image (owner: deployer); (3) upgrade-authority decision multisig-vs-renounce §7.3 (owner: deployer); (4) atomic mainnet launch script in scripts/ incl. bit-exact lock computation + aggregator smoke test (agent: opencode, needs metadata first); (5) keypair backup off-machine (owner: deployer). Devnet phase journal (entries 1-25) accepted as complete history.",
+      "next": "Implement (1), then hand (2)-(3) to deployer."
     }
   ]
 }
