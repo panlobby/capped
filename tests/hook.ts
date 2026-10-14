@@ -61,7 +61,7 @@ describe("hookasino caps", () => {
       .rpc();
     await program.methods
       .initializeConfig(pool, new BN(lockTokens).mul(U))
-      .accounts({ authority: payer.publicKey, mint, config })
+      .accounts({ authority: payer.publicKey, mint, config, pool })
       .rpc();
     const vaultAcc = await getOrCreateAssociatedTokenAccount(
       provider.connection,

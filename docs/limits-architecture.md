@@ -5,7 +5,7 @@ Goal: a token where every trade is a bet of a **pre-defined size**, like limit h
 pool trades on the curve. Tradable on **any DEX** supporting Token-2022 transfer hooks
 (Meteora UI, Jupiter, fomo.family) — no walled garden, no custom router in v1.
 
-Status: hook implemented (`programs/hook`), 27/27 native Rust unit tests pass
+Status: hook implemented (`programs/hook`), 31/31 native Rust unit tests pass
 (`cargo test -p hook`), 14/14 validator integration tests pass (`tests/hook.ts`
 via local validator). Curve modeled (`scripts/curve-matrix.ts`, SDK 1.5.13).
 Devnet E2E complete: full lifecycle proven through DAMM v2 migration (see §8).
@@ -186,8 +186,8 @@ at 12.5k and grow holds only.
   extra-metas init (mint-bound config + authority check), `transfer_hook`
   + `fallback` (strict `transferring` on real CPI), DBC owner/discriminator
   check on full-size pools, token-mint cross-check, mock-pool helper for tests.
-- `cargo test -p hook`: **27/27 pass** (tier bounds, both pool layouts, exact/
-  wrong/hold/authority/P2P/strict-mode/tail-dust/owner/disc/mint cases).
+- `cargo test -p hook`: **31/31 pass** (tier bounds, both pool layouts, exact/
+  wrong/hold/authority/P2P/strict-mode/tail-dust/owner/disc/mint/vault cases).
 - `tests/hook.ts`: **14/14 pass** on local validator (`bun mocha --require
   ts-node/register`; `anchor test` broken on Node 26 — mocha 9 / yargs ESM bug).
 - Curve matrix: done (see §3). Config-creation params file: not yet written.
@@ -197,7 +197,7 @@ at 12.5k and grow holds only.
 1. Bet `==` exact vs `<=` max — DECIDED: hybrid. Strict `==` everywhere,
    except the tail (`vault - migration_lock < bet`): buys take almost all of
    the remainder (at most `TAIL_DUST_CAP` = 10_000 raw units left above lock),
-   sells stay exact (implemented, 27/27 unit + 14/14 integration pass).
+   sells stay exact (implemented, 31/31 unit + 14/14 integration pass).
    Mid-curve fomo `ExactIn` dust still reverts — accepted (separate UX issue).
 2. Accept S1 dust preflop — DECIDED: keep start $4.2k, preflop dust is part of
    the design (anti-snipe grind).

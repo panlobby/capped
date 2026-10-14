@@ -85,6 +85,26 @@ pub mod hook {
                 }
             }
         }
+        // Pool binding: the pubkey arg must match the passed pool account; real
+        // DBC pools are fully validated (owner, discriminator, creator,
+        // base_mint). Small mock layouts skip validation (local integration
+        // tests only) — mainnet pools are always real DBC accounts.
+        // NOTE: this does not stop a determined front-runner who creates their
+        // own real DBC pool for the mint — first-come PDA init means the launch
+        // MUST be atomic (single tx / bundle, see runbook note above).
+        require_keys_eq!(pool, ctx.accounts.pool.key(), ErrorCode::WrongPool);
+        {
+            let data = ctx.accounts.pool.data.borrow();
+            if data.len() >= BASE_RESERVE_OFFSET + 8 {
+                require_keys_eq!(*ctx.accounts.pool.owner, DBC_PROGRAM_ID, ErrorCode::WrongPool);
+                let disc: [u8; 8] = data[0..8].try_into().unwrap();
+                require!(disc == TRANSFER_HOOK_POOL_DISC, ErrorCode::WrongPool);
+                let creator = Pubkey::new_from_array(data[104..136].try_into().unwrap());
+                require_keys_eq!(creator, ctx.accounts.authority.key(), ErrorCode::Unauthorized);
+                let base_mint = Pubkey::new_from_array(data[136..168].try_into().unwrap());
+                require_keys_eq!(base_mint, ctx.accounts.mint.key(), ErrorCode::WrongConfig);
+            }
+        }
         let config = &mut ctx.accounts.config;
         config.authority = ctx.accounts.authority.key();
         config.mint = ctx.accounts.mint.key();
@@ -236,7 +256,7 @@ fn execute_checks(
     }
 
     // 4. Parse token accounts (mint + owner + pre-transfer amount).
-    let (src_owner, _src_amount) = parse_token_account(source, mint)?;
+    let (src_owner, src_amount) = parse_token_account(source, mint)?;
     let (dst_owner, dst_amount) = parse_token_account(destination, mint)?;
 
     // 5. Transferring flags: strict on real CPI; lenient when account lacks extension (unit mocks).
@@ -254,6 +274,23 @@ fn execute_checks(
         !(src_is_pool && dst_is_pool),
         ErrorCode::InvalidDirection
     );
+
+    // 6b. Vault binding (real pools only): the pool-side account must be the
+    // pool's base_vault (offset 168..200, verified vs SDK PoolState layout).
+    // This proves the transfer ran inside DBC's swap2_with_transfer_hook and
+    // blocks raw transfer_checked donations that would desync the vault from
+    // DBC virtual state. Amount consistency is checked in §7b once the
+    // reserve is read. Mock layouts skip this (test-only).
+    if pool_ai.data.borrow().len() >= BASE_RESERVE_OFFSET + 8 {
+        let pool_data = pool_ai.data.borrow();
+        let base_vault = Pubkey::new_from_array(pool_data[168..200].try_into().unwrap());
+        drop(pool_data);
+        if src_is_pool {
+            require_keys_eq!(source.key(), base_vault, ErrorCode::InvalidPool);
+        } else {
+            require_keys_eq!(destination.key(), base_vault, ErrorCode::InvalidPool);
+        }
+    }
 
     // 7. Tier from PRE-transfer vault. Token-2022 debits/credits BEFORE the
     // hook CPI, so the hook observes post-transfer balances; reconstruct:
@@ -273,6 +310,26 @@ fn execute_checks(
     let buyable = pre_remaining
         .checked_sub(migration_lock)
         .ok_or(ErrorCode::InvalidPool)?;
+
+    // 7b. Vault amount consistency (real pools only): the pool-side account's
+    // POST-transfer amount must agree with pool.base_reserve. The hook observes
+    // post-transfer balances (Token-2022 debits/credits before the CPI), while
+    // the reserve still holds the pre value: buy vault_post + amount == R,
+    // sell vault_post - amount == R. (collect_fee_mode == QuoteToken: no base
+    // fees stay in the vault, so a legit swap moves exactly `amount`.)
+    if pool_ai.data.borrow().len() >= BASE_RESERVE_OFFSET + 8 {
+        if src_is_pool {
+            require!(
+                src_amount.checked_add(amount).ok_or(ErrorCode::MathOverflow)? == remaining,
+                ErrorCode::InvalidPool
+            );
+        } else {
+            require!(
+                dst_amount.checked_sub(amount).ok_or(ErrorCode::InvalidPool)? == remaining,
+                ErrorCode::InvalidPool
+            );
+        }
+    }
 
     // 8. Bet size. Exact street bet, except the tail: when less than one bet
     // is left buyable, the buy must drain (almost) all of it — DBC rounding
@@ -414,6 +471,8 @@ pub struct InitializeConfig<'info> {
         bump
     )]
     pub config: Account<'info, HookConfig>,
+    /// CHECK: DBC pool this config belongs to; validated in handler.
+    pub pool: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -590,6 +649,8 @@ mod tests {
         pool_lamports: u64,
         cfg_lamports: u64,
         pool_owner: Pubkey,
+        corrupt_vault_key: bool,
+        corrupt_vault_amount: bool,
     }
 
     impl Fixture {
@@ -620,11 +681,23 @@ mod tests {
                 // Real-layout pools are DBC-owned (owner+disc enforced);
                 // mock layouts are test-only and unchecked.
                 pool_owner: if mock_pool { key(55) } else { DBC_PROGRAM_ID },
+                corrupt_vault_key: false,
+                corrupt_vault_amount: false,
             }
         }
 
         fn with_pool_owner(mut self, owner: Pubkey) -> Self {
             self.pool_owner = owner;
+            self
+        }
+
+        fn misalign_vault_key(mut self) -> Self {
+            self.corrupt_vault_key = true;
+            self
+        }
+
+        fn misalign_vault_amount(mut self) -> Self {
+            self.corrupt_vault_amount = true;
             self
         }
 
@@ -655,6 +728,36 @@ mod tests {
             let mut mint_l = mint_lamports;
             let mut auth_l = auth_lamports;
             let mut extra_l = extra_lamports;
+            // Real-size pools: align vault key + POST-transfer vault amount with
+            // pool state, as DBC would leave them. Positive tests then exercise
+            // the binding without false rejections; negative tests corrupt it
+            // via misalign_* builders. Mock layouts skip the binding entirely.
+            if self.pool_data_v.len() >= BASE_RESERVE_OFFSET + 8 {
+                let r = u64::from_le_bytes(
+                    self.pool_data_v[BASE_RESERVE_OFFSET..BASE_RESERVE_OFFSET + 8]
+                        .try_into()
+                        .unwrap(),
+                );
+                let src_o =
+                    Pubkey::new_from_array(self.src_data[32..64].try_into().unwrap());
+                let dst_o =
+                    Pubkey::new_from_array(self.dst_data[32..64].try_into().unwrap());
+                if src_o == POOL_AUTHORITY {
+                    let vk = if self.corrupt_vault_key { key(77) } else { src_key };
+                    self.pool_data_v[168..200].copy_from_slice(vk.as_ref());
+                    if !self.corrupt_vault_amount {
+                        let v = r.checked_sub(amount).unwrap_or(0);
+                        self.src_data[64..72].copy_from_slice(&v.to_le_bytes());
+                    }
+                } else if dst_o == POOL_AUTHORITY {
+                    let vk = if self.corrupt_vault_key { key(77) } else { dst_key };
+                    self.pool_data_v[168..200].copy_from_slice(vk.as_ref());
+                    if !self.corrupt_vault_amount {
+                        let v = r.checked_add(amount).unwrap_or(u64::MAX);
+                        self.dst_data[64..72].copy_from_slice(&v.to_le_bytes());
+                    }
+                }
+            }
             let src_ai = AccountInfo::new(
                 &src_key, false, true, &mut self.src_lamports, &mut self.src_data,
                 &src_owner_prog, false, Epoch::default(),
@@ -893,6 +996,41 @@ mod tests {
         f.src_data[0..32].copy_from_slice(key(99).as_ref());
         let err = f.run(POOL_AUTHORITY, BET_S1).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidTokenAccount.into());
+    }
+
+    #[test]
+    fn real_sell_exact_passes() {
+        // Sell through a full-size pool: vault key + amount binding hold.
+        let user = key(60);
+        let mut f = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, false, 0);
+        assert!(f.run(user, BET_S1).is_ok());
+    }
+
+    #[test]
+    fn real_buy_vault_key_mismatch_reverts() {
+        // Pool-side source is not the pool's base_vault: raw donation blocked.
+        let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, false, 0)
+            .misalign_vault_key();
+        let err = f.run(POOL_AUTHORITY, BET_S3).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidPool.into());
+    }
+
+    #[test]
+    fn real_buy_vault_amount_desync_reverts() {
+        // Vault POST amount disagrees with pool.base_reserve: desync blocked.
+        let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, false, 0)
+            .misalign_vault_amount();
+        let err = f.run(POOL_AUTHORITY, BET_S3).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidPool.into());
+    }
+
+    #[test]
+    fn real_sell_vault_key_mismatch_reverts() {
+        let user = key(60);
+        let mut f = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, false, 0)
+            .misalign_vault_key();
+        let err = f.run(user, BET_S1).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidPool.into());
     }
 
     #[test]

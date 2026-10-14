@@ -253,6 +253,19 @@
       ],
       "details": "CRITICAL-1 fixed: InitializeExtraMetas config now seeds=[config,mint]+bump+has_one=mint+authority==payer+pool!=default. CRITICAL-2 fixed: set_pool deleted (nothing referenced it). HIGH-2/A2 fixed for real pools: owner==DBC program + TransferHookPool discriminator eddbb8172abda923 (offsets verified vs SDK PoolState layout); mock layouts (<240B) stay test-only. A5 fixed: token-account mint field cross-checked. A3 partial: lenient TransferHook-extension check in initialize_config (strict would break SPL-mint integration tests); full pool-creator validation deferred to atomic-launch runbook (documented in handler docs). MEDIUM-1 fixed: TAIL_DUST_CAP 1M->10k + boundary tests (10k passes, 20k reverts). Graduating DBC decided final (AGENTS.md + §7.6 updated). LOW-4 fixed: curve-matrix $20M->$10M comments, §6 counts. LOW-2 reverted: anchor-spl/spl-associated-token-account removal breaks build (global_allocator conflict with spl_token_2022) — kept with comment.",
       "next": "Re-run 14/14 integration on local validator with new .so, then commit; devnet redeploy + tiny/main pool re-verification optional."
+    },
+    {
+      "date": "2026-10-14",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "HIGH-1/HIGH-2 closed: pool validated in initialize_config, base_vault + amount binding in hook. 31/31 + 14/14.",
+      "files": [
+        "programs/hook/src/lib.rs",
+        "tests/hook.ts",
+        "docs/limits-architecture.md"
+      ],
+      "details": "HIGH-1: InitializeConfig takes pool account; handler requires arg==account, and for real-size pools owner==DBC + TransferHookPool disc + creator==authority + base_mint==mint (offsets 104..136/136..168 verified vs SDK PoolState). Mock layouts skip (integration uses mock pools). Residual: determined front-runner with own real DBC pool still possible -> atomic launch mandatory (documented). HIGH-2: execute_checks binds pool-side account to pool.base_vault[168..200] and vault POST amount to base_reserve (buy post+amount==R, sell post-amount==R). 4 new tests (real sell pass, buy/sell vault-key mismatch, amount desync). Fixture auto-aligns vault side for real layouts. NOTE: manual-step*.ts now stale vs new IDL (initializeConfig needs pool account); throwaways pending deletion.",
+      "next": "Devnet redeploy + re-verification (tiny pool tail/graduation with vault binding live), then repo cleanup (manual-*.ts, lockfiles, CI) and mainnet runbook."
     }
   ]
 }
