@@ -1,7 +1,8 @@
-// Curve modeling: 1B/6dec, start 4.2k -> migrate $10M, fee 25bps flat, SOL=100$.
-// Walks the curve with 0.5 SOL ExactIn steps, snapshots streets at
-// 50M / 150M / 400M sold, prints ExactIn + ExactOut matrix per street.
-// Usage: bun scripts/curve-matrix.ts [w1,w2,w3,w4]  (default 5,10,25,40)
+// Curve modeling: 1B/6dec, start $10k -> migrate $1M, fee 25bps flat, SOL=100$.
+// Variant C streets: borders at 50M / 150M / 375M sold, buy bets 50k/50k/75k/100k.
+// Walks the curve with 0.5 SOL ExactIn steps, snapshots streets, prints
+// ExactIn + ExactOut matrix per street.
+// Usage: bun scripts/curve-matrix.ts [w1,...,w16]  (default flat 16 ones)
 import {
   buildCurveWithLiquidityWeights,
   getCurveBreakdown,
@@ -34,12 +35,12 @@ const sol = (n: number) => new BN(Math.round(n * LAMPORTS).toString());
 const fmtTok = (b: BN) => (Number(b.toString()) / BASE_DEC).toLocaleString("en-US", { maximumFractionDigits: 0 });
 const fmtSol = (b: BN) => (Number(b.toString()) / LAMPORTS).toFixed(4);
 
-// NOTE: builder mcaps are in QUOTE (SOL) units. $10M @ $100/SOL = 100_000 SOL.
-const INITIAL_MCAP_SOL = 42; // $4.2k
-const MIGRATION_MCAP_SOL = 100_000; // $10M
+// NOTE: builder mcaps are in QUOTE (SOL) units. $1M @ $100/SOL = 10_000 SOL.
+const INITIAL_MCAP_SOL = 100; // $10k
+const MIGRATION_MCAP_SOL = 10_000; // $1M
 const weights = (process.argv[2] ?? "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1").split(",").map(Number);
 if (weights.length !== 16) throw new Error("need 16 weights (builder always makes 16 segments)");
-console.log(`weights=[${weights}] start=$4.2k migrate=$10M fee=25bps SOL=$${SOL_USD}\n`);
+console.log(`weights=[${weights}] start=$10k migrate=$1M fee=25bps SOL=$${SOL_USD}\n`);
 
 const cfg: any = buildCurveWithLiquidityWeights({
   token: {
@@ -93,7 +94,7 @@ bd.segmentAmounts.forEach((a: any, i: number) =>
 const swapBase = getBaseTokenForSwap(cfg.sqrtStartPrice, bd.finalSqrtPrice, cfg.curve);
 console.log(`  total buyable (walk target): ${fmtTok(swapBase)}`);
 console.log(`  migration threshold: ${fmtSol(cfg.migrationQuoteThreshold)} SOL`);
-console.log(`  migration quote for 10M mcap sanity: threshold should be << 100000 SOL`);
+console.log(`  migration quote for 1M mcap sanity: threshold should be << 10000 SOL`);
 
 // PoolConfig shape for quote fns
 const baseFee: any = getBaseFeeParams({
@@ -136,10 +137,10 @@ const STEP = sol(0.5);
 let sqrtPrice: any = cfg.sqrtStartPrice;
 let sold = new BN(0);
 let quoteRes = new BN(0);
-const borders = [50_000_000, 150_000_000, 400_000_000]; // tokens sold
-const TAIL_SOLD = 760_000_000; // ~99% — "last bet" check
+const borders = [50_000_000, 150_000_000, 375_000_000]; // tokens sold (S1/S2/S3 ends)
+const TAIL_SOLD = 767_000_000; // ~99% of 775M buyable — "last bet" check
 let tailSnap: { mcap: number; sqrt: any; quote: BN } | null = null;
-const snaps: { soldM: number; mcap: number; sqrt: any; quote: BN }[] = [{ soldM: 0, mcap: 4200, sqrt: sqrtPrice, quote: new BN(0) }];
+const snaps: { soldM: number; mcap: number; sqrt: any; quote: BN }[] = [{ soldM: 0, mcap: 10000, sqrt: sqrtPrice, quote: new BN(0) }];
 const segSold: string[] = [];
 let segIdx = 0;
 let prevSold = new BN(0);
@@ -154,8 +155,14 @@ while (quoteRes.lt(cfg.migrationQuoteThreshold) && guard++ < 200000) {
   } catch {
     break;
   }
+  // A 1-lamport step carries a 1-lamport minimum fee (net zero) — stop, the
+  // walk has converged; otherwise the loop spins on the guard.
+  if (r.excludedFeeInputAmount.isZero()) break;
   sold = sold.add(r.outputAmount);
-  quoteRes = quoteRes.add(r.includedFeeInputAmount);
+  // On-chain quote_reserve accumulates NET quote (fees go to separate
+  // protocol/partner fee fields), so the walk must add excludedFeeInputAmount.
+  // Using includedFee understated buyable by ~562k tokens (MEDIUM-C1).
+  quoteRes = quoteRes.add(r.excludedFeeInputAmount);
   sqrtPrice = r.nextSqrtPrice;
   while (segIdx < 16 && sqrtPrice.gte(cfg.curve[segIdx].sqrtPrice)) {
     segSold.push(`seg${segIdx}=${((Number(sold.toString()) - Number(prevSold.toString())) / BASE_DEC / 1e6).toFixed(1)}M`);
@@ -175,7 +182,7 @@ console.log(`--- walk done: sold=${fmtTok(sold)} quote=${fmtSol(quoteRes)} steps
 console.log(`street borders hit at mcap: ${snaps.map((s) => `$${Math.round(s.mcap).toLocaleString()}`).join(" / ")}`);
 
 const streets = ["S1 preflop", "S2 flop", "S3 turn", "S4 river"];
-const bets = [50_000, 50_000, 25_000, 12_500];
+const bets = [50_000, 50_000, 75_000, 100_000];
 console.log("\n--- ExactIn: tokens out for SOL in (fee+impact incl, no slippage) ---");
 for (const amt of [0.05, 0.1, 0.5]) {
   const row = snaps.map((s) => {
@@ -190,6 +197,6 @@ snaps.forEach((s, i) => {
   console.log(`  ${streets[i]} bet ${bets[i].toLocaleString()} tok costs ${fmtSol(r.includedFeeInputAmount)} SOL (mcap $${Math.round(s.mcap).toLocaleString()})`);
 });
 if (tailSnap) {
-  const r: any = getSwapResultFromExactOutput(vp(tailSnap.sqrt, tailSnap.quote) as any, poolConfig, tok(12_500), feeMode, TradeDirection.QuoteToBase, ZERO, false);
-  console.log(`  LAST bet 12,500 tok @99% sold costs ${fmtSol(r.includedFeeInputAmount)} SOL (mcap $${Math.round(tailSnap.mcap).toLocaleString()})`);
+  const r: any = getSwapResultFromExactOutput(vp(tailSnap.sqrt, tailSnap.quote) as any, poolConfig, tok(100_000), feeMode, TradeDirection.QuoteToBase, ZERO, false);
+  console.log(`  LAST bet 100,000 tok @99% sold costs ${fmtSol(r.includedFeeInputAmount)} SOL (mcap $${Math.round(tailSnap.mcap).toLocaleString()})`);
 }

@@ -45,7 +45,7 @@
       "files": [
         "manual-step2.ts (untracked, throwaway)"
       ],
-      "details": "Config 8AtjAADknwG9bpbwPtRpkuyakynHTSj1E1XSXMYX7i9E, tx 4ogp8Bn4P5MmbiaiWtayy8VM4z1pgMHGDNKuDGgUSXk67JAAue9EEqdSaAdv1Bed32datv84RuoM3HmDouHFiDh6. Verified: discriminator 28dcc2fb29c77bfd = configWithTransferHook, owner = DBC program, hook pubkey bytes present, threshold 23256694100941 lamports (~23256 SOL, matches model), collectFeeMode=QuoteToken, tokenType=Token2022. Bug found on the way: web3.js 1.98 tx.sign() wipes other signatures — fixed by single tx.sign(configKp, wallet). Wallet AHe1Y4W5H7nuDocouDNa8SQZPQQ1iGfzdXmGJaR6MVV1 confirmed as deployer + feeClaimer.",
+      "details": "Config 8AtjAADknwG9bpbwPtRpkuyakynHTSj1E1XSXMYX7i9E, tx 4ogp8Bn4P5MmbiaiWtayy8VM4z1pgMHGDNKuDGgUSXk67JAAue9EEqdSaAdv1Bed32datv84RuoM3HmDouHFiDh6. Verified: discriminator 28dcc2fb29c77bfd = configWithTransferHook, owner = DBC program, hook pubkey bytes present, threshold 23256694100941 lamports (~23256 SOL, matches model), collectFeeMode=QuoteToken, tokenType=Token2022. Bug found on the way: web3.js 1.98 tx.sign() wipes other signatures \u2014 fixed by single tx.sign(configKp, wallet). Wallet AHe1Y4W5H7nuDocouDNa8SQZPQQ1iGfzdXmGJaR6MVV1 confirmed as deployer + feeClaimer.",
       "next": "Step 3: createPoolWithTransferHook (full-size pool #1), then initialize_config + initialize_extra_account_meta_list for the new mint."
     },
     {
@@ -78,7 +78,7 @@
       "files": [
         "manual-step5a.ts (untracked, throwaway)"
       ],
-      "details": "Swap tx 3d4umvkxtC88YGaDPm3jyZmzk7Uv4c61ksR1L3BdaYBwEA63NdXb2qcHLeyoaXvuJ85QvnC2CBnvFVq8e6d2zqJx. Cost 2128171 lamports (~0.0021 SOL ~ $0.21) — matches curve-matrix S1 dust prediction exactly. User balance exactly 50_000 tokens. Logs confirm hook program CPI inside Swap2WithTransferHook.",
+      "details": "Swap tx 3d4umvkxtC88YGaDPm3jyZmzk7Uv4c61ksR1L3BdaYBwEA63NdXb2qcHLeyoaXvuJ85QvnC2CBnvFVq8e6d2zqJx. Cost 2128171 lamports (~0.0021 SOL ~ $0.21) \u2014 matches curve-matrix S1 dust prediction exactly. User balance exactly 50_000 tokens. Logs confirm hook program CPI inside Swap2WithTransferHook.",
       "next": "Step 5b: wrong-size buy 30k (expect InvalidBetSize), then sell 50k, P2P rejection, fee claim."
     },
     {
@@ -100,7 +100,7 @@
       "files": [
         "manual-step5c.ts (untracked, throwaway)"
       ],
-      "details": "Buy 50k tx 4hwJQ5FJ7wvwhME8WfPSbXwpRDrTktjVRvGHQaPkM3EdzYxzjpvLbZXQYEv2drYtDTHnnPz1BbLE7q2NBFbRhVMD. P2P 50k reverted with P2PBlocked (0x1777) at lib.rs:179 via hook CPI — required transferCheckedWithTransferHook (plain transferChecked fails early with MissingAccount, never reaches hook). Sell 50k tx 3C9aug7P1Skw7oa59FRxotQ9iGfJ5YyuiXL1wdX72Eb8urfzy5NQMSnCMa8PWcMSL2PUDEfR861cAKfh7ApwpAVQ, final balance 0. Note: devnet public RPC 429s under load, SDK retries handle it.",
+      "details": "Buy 50k tx 4hwJQ5FJ7wvwhME8WfPSbXwpRDrTktjVRvGHQaPkM3EdzYxzjpvLbZXQYEv2drYtDTHnnPz1BbLE7q2NBFbRhVMD. P2P 50k reverted with P2PBlocked (0x1777) at lib.rs:179 via hook CPI \u2014 required transferCheckedWithTransferHook (plain transferChecked fails early with MissingAccount, never reaches hook). Sell 50k tx 3C9aug7P1Skw7oa59FRxotQ9iGfJ5YyuiXL1wdX72Eb8urfzy5NQMSnCMa8PWcMSL2PUDEfR861cAKfh7ApwpAVQ, final balance 0. Note: devnet public RPC 429s under load, SDK retries handle it.",
       "next": "Step 5d: claimPartnerTradingFee2 (fee check). Then step 6: tiny pool for graduation test."
     },
     {
@@ -111,7 +111,7 @@
       "files": [
         "manual-step5d.ts (untracked, throwaway)"
       ],
-      "details": "Claim tx 35BUCbKfu16yvEFmBXrsmLKi7eNbgEXeXNY4U15xxYgTGawUSv7ZLU38dwopYtR75sNt8YEH1TPo8sPNKCe4jA1d. Balance +~0.00002 SOL net of tx fee — matches ~0.20% of the tiny test volume (~0.008 SOL). claimPartnerTradingFee2 path verified with receiver=feeClaimer=wallet.",
+      "details": "Claim tx 35BUCbKfu16yvEFmBXrsmLKi7eNbgEXeXNY4U15xxYgTGawUSv7ZLU38dwopYtR75sNt8YEH1TPo8sPNKCe4jA1d. Balance +~0.00002 SOL net of tx fee \u2014 matches ~0.20% of the tiny test volume (~0.008 SOL). claimPartnerTradingFee2 path verified with receiver=feeClaimer=wallet.",
       "next": "Step 6: tiny pool (config + pool, ~500k supply, ~2-3 SOL threshold), buy out to graduation, verify hook revocation + DAMM v2 migration."
     },
     {
@@ -132,7 +132,7 @@
       "type": "finding",
       "summary": "CRITICAL: exact-bet hook makes graduation mathematically impossible (tail trap).",
       "files": [],
-      "details": "Tiny pool stuck at reserve 2.438/2.581 SOL: ExactOut 12.5k and 10k quote FAIL (Not enough liquidity), 5k OK — remaining buyable is 5-10k tokens, unbuyable with == 12.5k bets. Main pool same disease: buyable = 767432058990588 raw (767,432,058.99 tokens), buyable % 12.5k = 7058990588 raw (~7,059 tokens tail). So main pool can NEVER graduate either — not 'almost unreachable' (docs 3/7.6) but literally unreachable. Funds not locked (sells always work). Options: (a) switch hook to <= (one-line + tests; tail becomes buyable, fomo ExactIn UX fixed too — docs 7.1 already recommended); (b) keep == and calibrate supply so buyable % bet == 0 (fragile); (c) accept permanent lock explicitly. Graduation mechanics test needs either (a) or a calibrated tiny pool #2.",
+      "details": "Tiny pool stuck at reserve 2.438/2.581 SOL: ExactOut 12.5k and 10k quote FAIL (Not enough liquidity), 5k OK \u2014 remaining buyable is 5-10k tokens, unbuyable with == 12.5k bets. Main pool same disease: buyable = 767432058990588 raw (767,432,058.99 tokens), buyable % 12.5k = 7058990588 raw (~7,059 tokens tail). So main pool can NEVER graduate either \u2014 not 'almost unreachable' (docs 3/7.6) but literally unreachable. Funds not locked (sells always work). Options: (a) switch hook to <= (one-line + tests; tail becomes buyable, fomo ExactIn UX fixed too \u2014 docs 7.1 already recommended); (b) keep == and calibrate supply so buyable % bet == 0 (fragile); (c) accept permanent lock explicitly. Graduation mechanics test needs either (a) or a calibrated tiny pool #2.",
       "next": "User decision: == vs <= vs accept-lock. Then either redeploy hook with <= or spin calibrated tiny pool #2."
     },
     {
@@ -145,7 +145,7 @@
         "tests/hook.ts",
         "docs/limits-architecture.md"
       ],
-      "details": "Holds 200k/1M/5M/20M. Thresholds 950M/850M/600M (vault scale; old 717/617/367M assumed buyable scale — streets lagged: S1 lasted till sold 283M instead of 50M). HookConfig.migration_lock appended last (space 105->113); initialize_config requires lock>0; pre-upgrade PDAs fall back to lock=0 strict-== (no bricking). Tail: buys with vault-lock<bet must take exact remainder; sells strict. 6 new unit tests (tail pass/partial/full-bet/over-hold/sell-exact/legacy-strict), 3 new integration tests (tail ctx lock=100k+7k). anchor build OK, local validator 13/13 via bun mocha. Next: redeploy hook to devnet + recreate pools with lock (lock_main = vault_0 - buyable_0 = 1e15 - 767432058990588 = 232567941009412 raw), then finish tiny#2 graduation test.",
+      "details": "Holds 200k/1M/5M/20M. Thresholds 950M/850M/600M (vault scale; old 717/617/367M assumed buyable scale \u2014 streets lagged: S1 lasted till sold 283M instead of 50M). HookConfig.migration_lock appended last (space 105->113); initialize_config requires lock>0; pre-upgrade PDAs fall back to lock=0 strict-== (no bricking). Tail: buys with vault-lock<bet must take exact remainder; sells strict. 6 new unit tests (tail pass/partial/full-bet/over-hold/sell-exact/legacy-strict), 3 new integration tests (tail ctx lock=100k+7k). anchor build OK, local validator 13/13 via bun mocha. Next: redeploy hook to devnet + recreate pools with lock (lock_main = vault_0 - buyable_0 = 1e15 - 767432058990588 = 232567941009412 raw), then finish tiny#2 graduation test.",
       "next": "Redeploy hook to devnet (upgrade, same program id). Recreate main pool #2 + tiny #2 with migration_lock. Re-run street tests + tail graduation."
     },
     {
@@ -156,7 +156,7 @@
       "files": [
         "programs/hook/src/lib.rs"
       ],
-      "details": "First fallback used a second Anchor struct (HookConfigLegacy) — but Anchor types get distinct discriminators, so real old PDAs (HookConfig discriminator, 105 bytes) failed deser -> WrongConfig -> old pools bricked (caught on devnet pool #1 buy: 0x1773 WrongConfig). Fixed: manual field parse, same discriminator, lock tail defaults to 0. Legacy unit test rewritten to truncate real HookConfig bytes (faithful old-PDA simulation). 20/20 unit + 13/13 integration pass. Deployed binary grew 288448->293280 bytes; programdata extended +50000. Mainnet lesson stands and is now proven: finalize logic before mainnet, upgrades after pools exist are dangerous.",
+      "details": "First fallback used a second Anchor struct (HookConfigLegacy) \u2014 but Anchor types get distinct discriminators, so real old PDAs (HookConfig discriminator, 105 bytes) failed deser -> WrongConfig -> old pools bricked (caught on devnet pool #1 buy: 0x1773 WrongConfig). Fixed: manual field parse, same discriminator, lock tail defaults to 0. Legacy unit test rewritten to truncate real HookConfig bytes (faithful old-PDA simulation). 20/20 unit + 13/13 integration pass. Deployed binary grew 288448->293280 bytes; programdata extended +50000. Mainnet lesson stands and is now proven: finalize logic before mainnet, upgrades after pools exist are dangerous.",
       "next": "User redeploys fixed build to devnet, then legacy re-test on pool #1, then pool #2 + tiny #2 with lock."
     },
     {
@@ -165,7 +165,7 @@
       "type": "devnet",
       "summary": "Fixed hook live on devnet; legacy pool #1 works again.",
       "files": [],
-      "details": "Redeploy tx 5vToH6Wzd3Dim2eFqk6d8ov5zYrcmSTxgPbxjiZYbbEmSryG83tGQho1DVLt6PRHnqZ3Ror2peYQK3oCpmvTcSbV finalized, slot 511082878. Legacy buy 50k on pool #1 passed (tx 3F92vd9FxLsZyoX7AT3jez3MKjVEUDU5C15Cw6BVUTTA7r4tVEqavmQyKWWZvnuFTWyD18zpadFaq3DFqCdacnTD, balance exactly 50k) — manual-parse fallback verified on real old PDA.",
+      "details": "Redeploy tx 5vToH6Wzd3Dim2eFqk6d8ov5zYrcmSTxgPbxjiZYbbEmSryG83tGQho1DVLt6PRHnqZ3Ror2peYQK3oCpmvTcSbV finalized, slot 511082878. Legacy buy 50k on pool #1 passed (tx 3F92vd9FxLsZyoX7AT3jez3MKjVEUDU5C15Cw6BVUTTA7r4tVEqavmQyKWWZvnuFTWyD18zpadFaq3DFqCdacnTD, balance exactly 50k) \u2014 manual-parse fallback verified on real old PDA.",
       "next": "Pool #2 (full-size) + tiny #2 with migration_lock, street re-tests, tail graduation to completion."
     },
     {
@@ -211,10 +211,10 @@
       "summary": "GRADUATION COMPLETE: tiny#2 tail buy -> hook revoked -> migrated to DAMM v2.",
       "files": [
         "manual-step10migrate.ts (untracked, throwaway)",
-        "docs/limits-architecture.md (§8)"
+        "docs/limits-architecture.md (\u00a78)"
       ],
       "details": "Final buy ExactOut(6671616416) tx BDjEFprkNYL4cMek8AFy6LeAQYLeatrXb81BqfgNDJdGaSRYWGabvmtDJ2ZRkwg3zYDnTMfZQN8RkT9jpD6gerQ: hook passed tail (pre=125M, bet 12.5k, lock 118.33M), DBC Update+SetAuthority revoked hook same swap, quoteReserve 2581224444 >= threshold 2581224428, vault left lock+459 dust. migrateToDammV2 tx 3j75CgKJRacDXQqqTLgxs2qh5c1KHeVyAYMF7tBhoGXVxUACqKdMip6KMBd7PosWjxzh3k5c7U1LjjqzYJ22MytC -> isMigrated=1. Full lifecycle proven end-to-end.",
-      "next": "Mainnet prep: aggregator visibility check (Jupiter/fomo) if wanted, upgrade-authority decision (§7.3), final hook audit, remove manual-*.ts throwaways, mainnet config+pool with lock."
+      "next": "Mainnet prep: aggregator visibility check (Jupiter/fomo) if wanted, upgrade-authority decision (\u00a77.3), final hook audit, remove manual-*.ts throwaways, mainnet config+pool with lock."
     },
     {
       "date": "2026-10-14",
@@ -225,7 +225,7 @@
         "docs/audit-2026-10-14.md"
       ],
       "details": "Read-only audit: line-by-line lib.rs review, cargo test re-run (22/22), live devnet RPC checks (mint/freeze authorities are live PDAs, not deployer key; same for both pools' mints), spl-token-2022 6.0.0 + spl-transfer-hook-interface 0.9.0 source verified for CPI account order and Seed::AccountKey semantics. Key facts: set_pool after extra-metas init permanently brics transfers (init-once PDA pins old pool); read_base_reserve mock-layout fallback (8/16-byte) ships in prod binary; initialize_config mint is unchecked. No code changes made.",
-      "next": "Deployer answers open questions §6 of the audit, then: hardening patch (A2/A3/A5/A6) + set_pool decision + docs sync + repo cleanup."
+      "next": "Deployer answers open questions \u00a76 of the audit, then: hardening patch (A2/A3/A5/A6) + set_pool decision + docs sync + repo cleanup."
     },
     {
       "date": "2026-10-14",
@@ -251,7 +251,7 @@
         "scripts/curve-matrix.ts",
         "AGENTS.md"
       ],
-      "details": "CRITICAL-1 fixed: InitializeExtraMetas config now seeds=[config,mint]+bump+has_one=mint+authority==payer+pool!=default. CRITICAL-2 fixed: set_pool deleted (nothing referenced it). HIGH-2/A2 fixed for real pools: owner==DBC program + TransferHookPool discriminator eddbb8172abda923 (offsets verified vs SDK PoolState layout); mock layouts (<240B) stay test-only. A5 fixed: token-account mint field cross-checked. A3 partial: lenient TransferHook-extension check in initialize_config (strict would break SPL-mint integration tests); full pool-creator validation deferred to atomic-launch runbook (documented in handler docs). MEDIUM-1 fixed: TAIL_DUST_CAP 1M->10k + boundary tests (10k passes, 20k reverts). Graduating DBC decided final (AGENTS.md + §7.6 updated). LOW-4 fixed: curve-matrix $20M->$10M comments, §6 counts. LOW-2 reverted: anchor-spl/spl-associated-token-account removal breaks build (global_allocator conflict with spl_token_2022) — kept with comment.",
+      "details": "CRITICAL-1 fixed: InitializeExtraMetas config now seeds=[config,mint]+bump+has_one=mint+authority==payer+pool!=default. CRITICAL-2 fixed: set_pool deleted (nothing referenced it). HIGH-2/A2 fixed for real pools: owner==DBC program + TransferHookPool discriminator eddbb8172abda923 (offsets verified vs SDK PoolState layout); mock layouts (<240B) stay test-only. A5 fixed: token-account mint field cross-checked. A3 partial: lenient TransferHook-extension check in initialize_config (strict would break SPL-mint integration tests); full pool-creator validation deferred to atomic-launch runbook (documented in handler docs). MEDIUM-1 fixed: TAIL_DUST_CAP 1M->10k + boundary tests (10k passes, 20k reverts). Graduating DBC decided final (AGENTS.md + \u00a77.6 updated). LOW-4 fixed: curve-matrix $20M->$10M comments, \u00a76 counts. LOW-2 reverted: anchor-spl/spl-associated-token-account removal breaks build (global_allocator conflict with spl_token_2022) \u2014 kept with comment.",
       "next": "Re-run 14/14 integration on local validator with new .so, then commit; devnet redeploy + tiny/main pool re-verification optional."
     },
     {
@@ -275,7 +275,7 @@
       "files": [
         "programs/hook/src/lib.rs"
       ],
-      "details": "First smoke with vault binding reverted InvalidPool on real pool: base_reserve at hook time is POST (DBC writes reserves before transfer CPI; tail-buy 459 dust only consistent with post). Fixed §7b to vault_post == reserve directly; unit Fixture realigns to post==post. Redeploy tx 2CPaiYLqbeyVfcejAq3FF23uDnY8Xbzvmz5uZP54vCghBPQsEXVzC6qK92wNFPBTQr6PGF4izDdLJaAacqRn6SBg. Buy ExactOut 50k tx LkErwZ79ErwQ8A61dxqLhjptZ8MvDKWpJXyUs6KqLxK98FYtbEMZGcq5R9Nycem4ZdX9MgPRyn6adLVVLKh8i8T (log street ok pre=999950000000000 bet=50B hold=200k lock=232567941009412), sell back 50k tx 2hVhsPcHtaZ6UkHpruUz9dNne23X7AGXdBBC3Ae2K3Ezy2kb1nMaq4y4MyA6tjcuyoPvzmGk486vGg9YdpSKFXYV. Owner/disc/base_vault/amount binding proven on live DBC data. 31/31 + 14/14 unchanged.",
+      "details": "First smoke with vault binding reverted InvalidPool on real pool: base_reserve at hook time is POST (DBC writes reserves before transfer CPI; tail-buy 459 dust only consistent with post). Fixed \u00a77b to vault_post == reserve directly; unit Fixture realigns to post==post. Redeploy tx 2CPaiYLqbeyVfcejAq3FF23uDnY8Xbzvmz5uZP54vCghBPQsEXVzC6qK92wNFPBTQr6PGF4izDdLJaAacqRn6SBg. Buy ExactOut 50k tx LkErwZ79ErwQ8A61dxqLhjptZ8MvDKWpJXyUs6KqLxK98FYtbEMZGcq5R9Nycem4ZdX9MgPRyn6adLVVLKh8i8T (log street ok pre=999950000000000 bet=50B hold=200k lock=232567941009412), sell back 50k tx 2hVhsPcHtaZ6UkHpruUz9dNne23X7AGXdBBC3Ae2K3Ezy2kb1nMaq4y4MyA6tjcuyoPvzmGk486vGg9YdpSKFXYV. Owner/disc/base_vault/amount binding proven on live DBC data. 31/31 + 14/14 unchanged.",
       "next": "Repo cleanup (manual-*.ts, lockfiles, CI), metadata, upgrade-authority decision, mainnet runbook."
     },
     {
@@ -289,7 +289,7 @@
         ".github/workflows/ci.yml"
       ],
       "details": "Deleted 13 untracked manual-step*.ts devnet throwaways (devnet phase done; manual scripts now stale vs new initializeConfig IDL anyway). Standardized on bun: bun.lock tracked, package-lock.json gitignored (both were untracked). Added minimal CI (cargo test -p hook --locked on push/PR). migrations/deploy.ts left as anchor scaffold. Reminder: back up target/deploy/hook-keypair.json off-machine (gitignored, upgrade authority).",
-      "next": "Metadata (name/symbol/uri+image), upgrade-authority decision (§7.3), mainnet runbook (atomic launch bundle)."
+      "next": "Metadata (name/symbol/uri+image), upgrade-authority decision (\u00a77.3), mainnet runbook (atomic launch bundle)."
     },
     {
       "date": "2026-10-14",
@@ -321,7 +321,7 @@
       "files": [
         "agent-changes.json"
       ],
-      "details": "Remaining before mainnet: (1) feature-gate mocks (agent: opencode); (2) metadata name/symbol/uri+image (owner: deployer); (3) upgrade-authority decision multisig-vs-renounce §7.3 (owner: deployer); (4) atomic mainnet launch script in scripts/ incl. bit-exact lock computation + aggregator smoke test (agent: opencode, needs metadata first); (5) keypair backup off-machine (owner: deployer). Devnet phase journal (entries 1-25) accepted as complete history.",
+      "details": "Remaining before mainnet: (1) feature-gate mocks (agent: opencode); (2) metadata name/symbol/uri+image (owner: deployer); (3) upgrade-authority decision multisig-vs-renounce \u00a77.3 (owner: deployer); (4) atomic mainnet launch script in scripts/ incl. bit-exact lock computation + aggregator smoke test (agent: opencode, needs metadata first); (5) keypair backup off-machine (owner: deployer). Devnet phase journal (entries 1-25) accepted as complete history.",
       "next": "Implement (1), then hand (2)-(3) to deployer."
     },
     {
@@ -336,8 +336,69 @@
         "docs/limits-architecture.md",
         ".github/workflows/ci.yml"
       ],
-      "details": "local-test feature gates init_mock_pool/InitMockPool/MockPool and <240B branches in read_base_reserve; initialize_config requires full-size pool unless feature. Verified: cargo test --features local-test 31/31; anchor build -- --features local-test -> validator 14/14 (initMockPool path proves feature on); plain anchor build -> IDL has only initialize_config/initialize_extra_account_meta_list/transfer_hook (no mocks, no set_pool). CI + docs §6 updated with feature commands. Mainnet binary must always be plain anchor build.",
+      "details": "local-test feature gates init_mock_pool/InitMockPool/MockPool and <240B branches in read_base_reserve; initialize_config requires full-size pool unless feature. Verified: cargo test --features local-test 31/31; anchor build -- --features local-test -> validator 14/14 (initMockPool path proves feature on); plain anchor build -> IDL has only initialize_config/initialize_extra_account_meta_list/transfer_hook (no mocks, no set_pool). CI + docs \u00a76 updated with feature commands. Mainnet binary must always be plain anchor build.",
       "next": "Metadata (deployer), upgrade-authority decision, atomic mainnet launch script."
+    },
+    {
+      "date": "2026-10-15",
+      "agent": "opencode",
+      "type": "devnet",
+      "summary": "Variant C full lifecycle proven on devnet: spot-checks + tiny#3 graduation + DAMM v2.",
+      "files": [
+        "programs/hook/src/lib.rs",
+        "tests/hook.ts",
+        "docs/limits-architecture.md",
+        "scripts/curve-matrix.ts",
+        "migrations/deploy.ts",
+        "scripts/spotcheck-pool2.ts",
+        "scripts/tiny3-create.ts",
+        "scripts/tiny3-buyout.ts",
+        "scripts/tiny3-migrate.ts"
+      ],
+      "details": "Deployed Variant C hook to devnet (26mV3...). Pool#2 S1: 50k buy pass, 30k InvalidBetSize, 25k chip sells pass, P2P blocked. Tiny#3 (reused tiny config): 3x100k + tail 81.67k + dust nibbles -> quote 2581224430 >= 2581224428, hook revoked, migrateToDammV2 -> isMigrated=1. Lessons: DBC allocates base mint (don't pre-create); tail quoter needs halve-and-nibble near curve end. Unit 34/34, integration 17/17.",
+      "next": "Final curve weights locked (775M/2245.88 SOL in docs+VARIANT_C_PARAMS). Remaining: metadata, upgrade-authority decision, mainnet atomic launch."
+    },
+    {
+      "date": "2026-10-15",
+      "agent": "opencode",
+      "type": "audit",
+      "summary": "Completed audit of Variant C mechanics and wrote docs/audit-variant-c.md.",
+      "files": [
+        "docs/audit-variant-c.md",
+        "agent-changes.json"
+      ],
+      "details": "Verified all previous Critical/High findings are closed (including front-running on mainnet: local-test feature gate + creator==authority + base_mint==mint + DBC mint init means only the real pool creator can call initialize_config). Verified Variant C rising bets (50k/50k/75k/100k) + 25k SELL_STEP chip sells + rising holds (200k/1M/4.5M/20M) have zero stuck-bag states across street transitions. Identified 2 Medium items: (1) scripts/curve-matrix.ts:158 adds includedFeeInputAmount instead of excludedFeeInputAmount to quoteRes, stopping the walk 0.25% early (774.85M vs true getBaseTokenForSwap 775.41M = 10,004 bets + 11.32k tail); (2) scripts/tiny3-buyout.ts:82 shaved 10,000 raw units upfront instead of binary-searching [buyable-TAIL_DUST_CAP, buyable] for max quotable ExactOut (which leaves 157 raw units on tiny3 and 21 raw units on Variant C, graduating in 1 single tail tx). Also noted 3 Low doc/script cleanups (limits-architecture.md \u00a74 58 SOL and \u00a77.6 $10M typos, unused imports in tiny3-create.ts). Journal note: the follow-up entry duplicating this artifact was merged here.",
+      "next": "Fix curve-matrix.ts:158 (excludedFeeInputAmount) + sync docs/deploy.ts, replace tiny3-buyout.ts shave loop with binary search, then mainnet launch prep."
+    },
+    {
+      "date": "2026-10-15",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "Applied external Variant C audit: fee-fixed curve walk (775.41M), binary-search tail, doc/msg cleanups, front-run closure comment.",
+      "files": [
+        "scripts/curve-matrix.ts",
+        "migrations/deploy.ts",
+        "docs/limits-architecture.md",
+        "programs/hook/src/lib.rs",
+        "scripts/tiny3-create.ts",
+        "scripts/tiny3-buyout.ts",
+        "agent-changes.json"
+      ],
+      "details": "MEDIUM-C1: walk now adds excludedFeeInputAmount; walk sold=775,411,323 == closed form. deploy.ts + docs resynced (S4 4,004x100k + 11.32k tail; \u00a74 ~5.6 SOL tax; \u00a77.6 $1M). MEDIUM-C2: buyout tail binary-searches max quotable (single-tx graduation); TAIL_DUST_CAP kept at 10k. LOW: InvalidBetSize msg, runbook comment now states front-run closure proof (DBC allocates mint + creator==authority), tiny3-create dead code removed + lock-warning comment. Merged duplicated audit journal entries.",
+      "next": "Re-run matrix + tests, then commit. Remaining pre-mainnet: metadata, upgrade-authority decision, atomic launch."
+    },
+    {
+      "date": "2026-10-15",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "Two polish notes: matrix zero-net break (200001 -> 4,507 steps), RPC-free binary search probes.",
+      "files": [
+        "scripts/curve-matrix.ts",
+        "scripts/tiny3-buyout.ts",
+        "agent-changes.json"
+      ],
+      "details": "Matrix walk breaks on zero excluded-fee step; sold still 775,411,323. Buyout binary search probes quoteOutLive on the fetched snapshot (no per-probe RPC). Verified: matrix rerun, tsc clean, 34/34 unit. Binary-search path still never fired on-chain \u2014 folded into pre-mainnet checklist as optional tiny rehearsal.",
+      "next": "Commit. Remaining pre-mainnet: metadata, upgrade-authority decision, atomic launch (+ optional binary-search live-fire)."
     }
   ]
 }

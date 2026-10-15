@@ -8,26 +8,34 @@ use spl_transfer_hook_interface::instruction::{ExecuteInstruction, TransferHookI
 declare_id!("3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH");
 
 // ---- Units: 6 decimals, 1 token = 1_000_000 base units ----
-/// 12.5k tokens in base units. GCD of all bets/holds.
+/// 12.5k tokens in base units. Kept for granularity; GCD of Variant C
+/// bets/holds is 25k (SELL_STEP), all sizes stay whole multiples of both.
 pub const UNIT: u64 = 12_500_000_000;
-// Bets per street (exact, base units): S1 50k, S2 50k, S3 25k, S4 12.5k
+/// Sell chip step: 25k tokens in base units. Sells must be a multiple of
+/// this and <= current street bet (25k / 50k / 75k / 100k).
+pub const SELL_STEP: u64 = 25_000_000_000;
+// Bets per street (base units), Variant C ($1M migrate, 10k tx):
+// S1 50k (4U), S2 50k (4U), S3 75k (6U), S4 100k (8U).
+// S1 0->50M (1000 tx), S2 50->150M (2000 tx), S3 150->375M (3000 tx),
+// S4 375->775M (4000 tx). Buyable 775M, lock ~225M (22.5%).
 pub const BET_S1: u64 = 50_000_000_000;
 pub const BET_S2: u64 = 50_000_000_000;
-pub const BET_S3: u64 = 25_000_000_000;
-pub const BET_S4: u64 = 12_500_000_000;
-// Hold caps per street (base units): 200k / 1M / 5M / 20M (0.02% / 0.1% / 0.5% / 2%).
-// Rising schedule: existing holders are never bricked by a street change.
+pub const BET_S3: u64 = 75_000_000_000;
+pub const BET_S4: u64 = 100_000_000_000;
+// Hold caps per street (base units): 200k / 1M / 4.5M / 20M
+// (0.02% / 0.1% / 0.45% / 2%). Rising schedule: existing holders are
+// never bricked by a street change.
 pub const HOLD_S1: u64 = 200_000_000_000;
 pub const HOLD_S2: u64 = 1_000_000_000_000;
-pub const HOLD_S3: u64 = 5_000_000_000_000;
+pub const HOLD_S3: u64 = 4_500_000_000_000;
 pub const HOLD_S4: u64 = 20_000_000_000_000;
 // Street thresholds in pool base_remaining (base units).
 // base_remaining tracks the VAULT balance (full supply at launch), not buyable:
-// S1 while sold < 50M, S2 < 150M, S3 < 400M, else S4 river to migrate.
-// (vault_0 = 1B supply; buyable is 767.4M, ~233M stays locked for migration.)
+// S1 while sold < 50M, S2 < 150M, S3 < 375M, else S4 river to migrate.
+// (vault_0 = 1B supply; buyable is 775M, ~225M stays locked for migration.)
 pub const REMAIN_S1_MIN: u64 = 950_000_000_000_000;
 pub const REMAIN_S2_MIN: u64 = 850_000_000_000_000;
-pub const REMAIN_S3_MIN: u64 = 600_000_000_000_000;
+pub const REMAIN_S3_MIN: u64 = 625_000_000_000_000;
 // Tail dust tolerance: 0.01 token in base units. DBC sqrt-price rounding leaves a
 // few hundred raw units undrainable (measured 459 after 30 swaps on devnet);
 // the final buy may leave at most this much above the migration lock.
@@ -61,8 +69,11 @@ pub mod hook {
     /// computed off-chain at pool creation). Powers the tail rule; must be > 0.
     /// MAINNET RUNBOOK: send createPoolWithTransferHook + initialize_config +
     /// initialize_extra_account_meta_list atomically (single tx / bundle).
-    /// Config PDA init is first-come: a split launch lets a watcher front-run
-    /// initialize_config with a wrong pool/lock and brick the mint.
+    /// Config PDA init is first-come, but front-running is closed: the handler
+    /// requires pool.creator == authority, so only the pool creator can ever
+    /// initialize the config — a watcher cannot brick the mint with a wrong
+    /// pool/lock. The remaining risk is the launcher's OWN wrong lock value:
+    /// verify vault_0 and buyable_0 byte-for-byte off-chain before sending.
     pub fn initialize_config(
         ctx: Context<InitializeConfig>,
         pool: Pubkey,
@@ -89,9 +100,13 @@ pub mod hook {
         // DBC pools are fully validated (owner, discriminator, creator,
         // base_mint). Small mock layouts skip validation (local integration
         // tests only) — mainnet pools are always real DBC accounts.
-        // NOTE: this does not stop a determined front-runner who creates their
-        // own real DBC pool for the mint — first-come PDA init means the launch
-        // MUST be atomic (single tx / bundle, see runbook note above).
+        // Front-running initialize_config is impossible on mainnet, not just
+        // unlikely: DBC allocates the base mint inside pool creation (proven
+        // live: pre-creating it fails with Allocate-Already-In-Use), so no
+        // second pool can exist for the same mint, pool creation needs the
+        // baseMint keypair only the launcher holds, and the checks below bind
+        // creator == authority and base_mint == mint. The atomic-launch bundle
+        // (single tx) stays as hygiene for the config-PDA first-come rule.
         require_keys_eq!(pool, ctx.accounts.pool.key(), ErrorCode::WrongPool);
         {
             let data = ctx.accounts.pool.data.borrow();
@@ -333,19 +348,28 @@ fn execute_checks(
         }
     }
 
-    // 8. Bet size. Exact street bet, except the tail: when less than one bet
-    // is left buyable, the buy must drain (almost) all of it — DBC rounding
-    // leaves dust (<= TAIL_DUST_CAP) that no ExactOut can source, so the final
-    // buy may leave at most dust above the lock. Sells always stay exact
-    // (they grow the vault, never drain it).
-    if src_is_pool && migration_lock > 0 && buyable < bet {
-        require!(amount > 0 && amount <= buyable, ErrorCode::InvalidBetSize);
-        require!(
-            remaining.saturating_sub(migration_lock) <= TAIL_DUST_CAP,
-            ErrorCode::InvalidBetSize
-        );
+    // 8. Bet size. Buys: exact street bet, except the tail: when less than
+    // one bet is left buyable, the buy must drain (almost) all of it — DBC
+    // rounding leaves dust (<= TAIL_DUST_CAP) that no ExactOut can source,
+    // so the final buy may leave at most dust above the lock.
+    // Sells (user -> vault, they grow the vault, never drain it): chip
+    // multiples — any multiple of SELL_STEP (25k) up to the street bet:
+    // S1/S2 (bet 50k): 25k | 50k; S3 (bet 75k): 25k | 50k | 75k;
+    // S4 (bet 100k): 25k | 50k | 75k | 100k. Lets any earlier bag
+    // (50k, 200k, ...) exit on any later street without stuck dust.
+    if src_is_pool {
+        if migration_lock > 0 && buyable < bet {
+            require!(amount > 0 && amount <= buyable, ErrorCode::InvalidBetSize);
+            require!(
+                remaining.saturating_sub(migration_lock) <= TAIL_DUST_CAP,
+                ErrorCode::InvalidBetSize
+            );
+        } else {
+            require!(amount > 0 && amount == bet, ErrorCode::InvalidBetSize);
+        }
     } else {
-        require!(amount > 0 && amount == bet, ErrorCode::InvalidBetSize);
+        require!(amount > 0 && amount <= bet, ErrorCode::InvalidBetSize);
+        require!(amount % SELL_STEP == 0, ErrorCode::InvalidBetSize);
     }
     if src_is_pool {
         // Buy: vault -> user. Authority must be pool authority (DBC signs).
@@ -563,7 +587,7 @@ pub enum ErrorCode {
     WrongConfig,
     #[msg("wrong pool account")]
     WrongPool,
-    #[msg("bet size must equal street bet exactly")]
+    #[msg("bet size must be the street bet (buys) or a 25k chip up to it (sells)")]
     InvalidBetSize,
     #[msg("receiver hold cap exceeded")]
     ExceedsHold,
@@ -813,7 +837,7 @@ mod tests {
     const TAIL_LOCK: u64 = 100_000_000_000;
     const TAIL_POST_DRAINED: u64 = 100_000_000_000; // post == lock (R taken fully)
     const TAIL_POST_PARTIAL: u64 = 106_000_000_000; // R=7k, A=1k in flight
-    const TAIL_POST_OVERSIZE: u64 = 94_500_000_000; // R=7k, A=12.5k in flight
+    const TAIL_POST_OVERSIZE: u64 = 94_500_000_000; // R=94.5k buyable, A=100k in flight
 
     #[test]
     fn tier_selection() {
@@ -822,8 +846,8 @@ mod tests {
         assert_eq!(tier_for(950_000_000_000_000), (BET_S2, HOLD_S2));
         assert_eq!(tier_for(850_000_000_000_001), (BET_S2, HOLD_S2));
         assert_eq!(tier_for(850_000_000_000_000), (BET_S3, HOLD_S3));
-        assert_eq!(tier_for(600_000_000_000_001), (BET_S3, HOLD_S3));
-        assert_eq!(tier_for(600_000_000_000_000), (BET_S4, HOLD_S4));
+        assert_eq!(tier_for(625_000_000_000_001), (BET_S3, HOLD_S3));
+        assert_eq!(tier_for(625_000_000_000_000), (BET_S4, HOLD_S4));
         assert_eq!(tier_for(0), (BET_S4, HOLD_S4));
     }
 
@@ -867,7 +891,7 @@ mod tests {
     }
 
     #[test]
-    fn s2_buy_50k_passes_25k_reverts() {
+    fn s2_buy_50k_passes_75k_reverts() {
         let mut f = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S2).is_ok());
         let mut f2 = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
@@ -876,7 +900,7 @@ mod tests {
     }
 
     #[test]
-    fn s3_buy_25k_passes_50k_reverts() {
+    fn s3_buy_75k_passes_50k_reverts() {
         let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S3).is_ok());
         let mut f2 = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
@@ -885,7 +909,7 @@ mod tests {
     }
 
     #[test]
-    fn s4_buy_12_5k_passes_25k_reverts() {
+    fn s4_buy_100k_passes_75k_reverts() {
         let mut f = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S4).is_ok());
         let mut f2 = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
@@ -894,13 +918,44 @@ mod tests {
     }
 
     #[test]
-    fn s1_sell_exact_passes_wrong_reverts() {
+    fn s1_sell_chips_pass_nonchip_reverts() {
+        // S1 bet 50k: sells 50k and 25k pass (multiples of 25k <= bet),
+        // 30k reverts (not a 25k multiple).
         let user = key(60);
         let mut f = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, 0);
         assert!(f.run(user, BET_S1).is_ok());
         let mut f2 = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, 0);
-        let err = f2.run(user, 30_000_000_000).unwrap_err();
+        assert!(f2.run(user, SELL_STEP).is_ok());
+        let mut f3 = Fixture::new(S1_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, 0);
+        let err = f3.run(user, 30_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn s3_sell_50k_exits_early_bag() {
+        // Early 50k bag exits on S3 (bet 75k) in one 50k chip tx.
+        let user = key(60);
+        let mut f = Fixture::new(S3_REM, user, 100_000_000_000, POOL_AUTHORITY, 0, true, 0);
+        assert!(f.run(user, 50_000_000_000).is_ok());
+    }
+
+    #[test]
+    fn s3_sell_over_bet_reverts() {
+        // S3 bet 75k: 100k sell exceeds street bet.
+        let user = key(60);
+        let mut f = Fixture::new(S3_REM, user, 200_000_000_000, POOL_AUTHORITY, 0, true, 0);
+        let err = f.run(user, BET_S4).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn s4_sell_chips_pass() {
+        // S4 bet 100k: 25k / 50k / 75k / 100k all pass; 200k bag exits 2x100k.
+        let user = key(60);
+        for amt in [SELL_STEP, 50_000_000_000, 75_000_000_000, BET_S4] {
+            let mut f = Fixture::new(S4_REM, user, 300_000_000_000, POOL_AUTHORITY, 0, true, 0);
+            assert!(f.run(user, amt).is_ok());
+        }
     }
 
     #[test]
@@ -935,7 +990,8 @@ mod tests {
 
     #[test]
     fn tail_buy_full_bet_reverts() {
-        // R=7k in flight as a full 12.5k bet: 12.5k != 7k.
+        // R=94.5k buyable (< BET_S4=100k) in flight as a full 100k bet:
+        // 100k > 94.5k buyable.
         let mut f = Fixture::new(TAIL_POST_OVERSIZE, POOL_AUTHORITY, 0, key(60), BET_S4, true, TAIL_LOCK);
         let err = f.run(POOL_AUTHORITY, BET_S4).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
@@ -1045,14 +1101,17 @@ mod tests {
     }
 
     #[test]
-    fn tail_sell_stays_exact() {
-        // Sells never get the tail exception: exact bet passes, remainder reverts.
-        // Post-vault 119.5k (pre 107k after a 12.5k sell / 112.5k after a 7k one).
+    fn tail_sell_chips_pass_nonchip_reverts() {
+        // Sells are chip multiples (25k steps <= bet), no tail exception.
+        // S4 bet 100k: 100k and 25k pass, 7k reverts (not a 25k multiple).
+        // Post-vault sized so pre stays above lock (sells grow the vault).
         let user = key(60);
-        let mut f = Fixture::new(119_500_000_000, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
+        let mut f = Fixture::new(219_500_000_000, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
         assert!(f.run(user, BET_S4).is_ok());
-        let mut f2 = Fixture::new(119_500_000_000, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
-        let err = f2.run(user, 7_000_000_000).unwrap_err();
+        let mut f2 = Fixture::new(219_500_000_000, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
+        assert!(f2.run(user, SELL_STEP).is_ok());
+        let mut f3 = Fixture::new(219_500_000_000, user, 100_000_000_000, POOL_AUTHORITY, 0, true, TAIL_LOCK);
+        let err = f3.run(user, 7_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 

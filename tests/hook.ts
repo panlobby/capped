@@ -13,7 +13,8 @@ const POOL_AUTHORITY = new PublicKey("FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHL
 const U = new BN(1_000_000);
 const TOK = (n: number) => new BN(n).mul(U);
 
-const BET = { s1: TOK(50_000), s2: TOK(50_000), s3: TOK(25_000), s4: TOK(12_500) };
+const BET = { s1: TOK(50_000), s2: TOK(50_000), s3: TOK(75_000), s4: TOK(100_000) };
+const SELL_STEP = TOK(25_000);
 
 function extraMetasPda(mint: PublicKey, programId: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
@@ -127,8 +128,8 @@ describe("hookasino caps", () => {
     // lock 100k everywhere; true remainder R implied per case.
     sTailBuy = await setupStreet(100_000, 5, 100_000); // R=7k fully taken
     sTailPartial = await setupStreet(106_000, 6, 100_000); // R=7k, 1k in flight
-    sTailFull = await setupStreet(94_500, 7, 100_000); // R=7k, 12.5k in flight
-    sTailSell = await setupStreet(119_500, 8, 100_000); // sell side
+    sTailFull = await setupStreet(94_500, 7, 100_000); // R=94.5k buyable, 100k in flight
+    sTailSell = await setupStreet(219_500, 8, 100_000); // sell side (pre stays above lock)
   });
 
   it("S1 buy exact 50k passes", async () => {
@@ -172,19 +173,19 @@ describe("hookasino caps", () => {
     }
   });
 
-  it("S2 buy 50k passes, 25k reverts", async () => {
+  it("S2 buy 50k passes, 75k reverts", async () => {
     const user = Keypair.generate();
     const dest = await userAta(s2.mint, user, 0);
     await check(s2, s2.vault, dest, POOL_AUTHORITY, BET.s2);
     try {
-      await check(s2, s2.vault, dest, POOL_AUTHORITY, TOK(25_000));
+      await check(s2, s2.vault, dest, POOL_AUTHORITY, BET.s3);
       assert.fail("should revert");
     } catch (e: any) {
       assert.include(e.toString(), "InvalidBetSize");
     }
   });
 
-  it("S3 buy 25k passes, 50k reverts", async () => {
+  it("S3 buy 75k passes, 50k reverts", async () => {
     const user = Keypair.generate();
     const dest = await userAta(s3.mint, user, 0);
     await check(s3, s3.vault, dest, POOL_AUTHORITY, BET.s3);
@@ -196,27 +197,55 @@ describe("hookasino caps", () => {
     }
   });
 
-  it("S4 buy 12.5k passes, 25k reverts", async () => {
+  it("S4 buy 100k passes, 75k reverts", async () => {
     const user = Keypair.generate();
     const dest = await userAta(s4.mint, user, 0);
     await check(s4, s4.vault, dest, POOL_AUTHORITY, BET.s4);
     try {
-      await check(s4, s4.vault, dest, POOL_AUTHORITY, TOK(25_000));
+      await check(s4, s4.vault, dest, POOL_AUTHORITY, BET.s3);
       assert.fail("should revert");
     } catch (e: any) {
       assert.include(e.toString(), "InvalidBetSize");
     }
   });
 
-  it("S1 sell exact 50k passes, 30k reverts", async () => {
+  it("S1 sells: 50k and 25k pass, 30k reverts (25k chips)", async () => {
     const user = Keypair.generate();
     const src = await userAta(s1.mint, user, 100_000);
     await check(s1, src, s1.vault, user.publicKey, BET.s1);
+    await check(s1, src, s1.vault, user.publicKey, SELL_STEP);
     try {
       await check(s1, src, s1.vault, user.publicKey, TOK(30_000));
       assert.fail("should revert");
     } catch (e: any) {
       assert.include(e.toString(), "InvalidBetSize");
+    }
+  });
+
+  it("S3 sell 50k exits early 50k bag in one chip", async () => {
+    const user = Keypair.generate();
+    const src = await userAta(s3.mint, user, 50_000);
+    const sig = await check(s3, src, s3.vault, user.publicKey, TOK(50_000));
+    assert.isString(sig);
+  });
+
+  it("S3 sell 100k over bet reverts", async () => {
+    const user = Keypair.generate();
+    const src = await userAta(s3.mint, user, 200_000);
+    try {
+      await check(s3, src, s3.vault, user.publicKey, BET.s4);
+      assert.fail("should revert");
+    } catch (e: any) {
+      assert.include(e.toString(), "InvalidBetSize");
+    }
+  });
+
+  it("S4 sells: 25k/50k/75k/100k chips pass", async () => {
+    const user = Keypair.generate();
+    const src = await userAta(s4.mint, user, 500_000);
+    for (const amt of [SELL_STEP, TOK(50_000), TOK(75_000), BET.s4]) {
+      const sig = await check(s4, src, s4.vault, user.publicKey, amt);
+      assert.isString(sig);
     }
   });
 
@@ -263,7 +292,7 @@ describe("hookasino caps", () => {
     }
   });
 
-  it("TAIL buy full 12.5k bet reverts (does not fit)", async () => {
+  it("TAIL buy full 100k bet reverts (does not fit)", async () => {
     const user = Keypair.generate();
     const dest = await userAta(sTailFull.mint, user, 0);
     try {
@@ -274,10 +303,11 @@ describe("hookasino caps", () => {
     }
   });
 
-  it("TAIL sell 12.5k passes, 7k reverts (sells stay exact)", async () => {
+  it("TAIL sells: 100k and 25k pass, 7k reverts (25k chips, no tail)", async () => {
     const user = Keypair.generate();
-    const src = await userAta(sTailSell.mint, user, 100_000);
+    const src = await userAta(sTailSell.mint, user, 300_000);
     await check(sTailSell, src, sTailSell.vault, user.publicKey, BET.s4);
+    await check(sTailSell, src, sTailSell.vault, user.publicKey, SELL_STEP);
     try {
       await check(sTailSell, src, sTailSell.vault, user.publicKey, TOK(7_000));
       assert.fail("should revert");
