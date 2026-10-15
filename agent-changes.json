@@ -399,6 +399,36 @@
       ],
       "details": "Matrix walk breaks on zero excluded-fee step; sold still 775,411,323. Buyout binary search probes quoteOutLive on the fetched snapshot (no per-probe RPC). Verified: matrix rerun, tsc clean, 34/34 unit. Binary-search path still never fired on-chain \u2014 folded into pre-mainnet checklist as optional tiny rehearsal.",
       "next": "Commit. Remaining pre-mainnet: metadata, upgrade-authority decision, atomic launch (+ optional binary-search live-fire)."
+    },
+    {
+      "date": "2026-10-15",
+      "agent": "opencode",
+      "type": "feature",
+      "summary": "Symmetric chips: buys share the 25k-chip rule (S1/S2 25/50, S3 to 75k, S4 to 100k). 35/35 + 18/18, 25k round-trip live.",
+      "files": [
+        "programs/hook/src/lib.rs",
+        "tests/hook.ts",
+        "docs/limits-architecture.md",
+        "docs/audit-variant-c.md",
+        "scripts/curve-matrix.ts",
+        "agent-changes.json"
+      ],
+      "details": "Motivation: sell-25k/rebuy-25k asymmetry + S1-fallback maneuver brick (175k bag + 50k-only buys overshoot 200k hold). Hook buy/sell merged to one chip check; tail stays buy-only. Matrix prints min+max chip costs. Devnet: upgraded hook, 25k buy+sell round-trip on pool#2. Docs tables/msg/counts resynced; audit addendum notes C1 unaffected.",
+      "next": "Commit. Remaining pre-mainnet: metadata, upgrade-authority decision, atomic launch (+ optional binary-search live-fire)."
+    },
+    {
+      "date": "2026-10-15",
+      "agent": "opencode",
+      "type": "fix",
+      "summary": "Tail-zone chip fix: fitting chips pass below street max, drain only under 25k. 38/38 + 19/19, devnet live.",
+      "files": [
+        "programs/hook/src/lib.rs",
+        "tests/hook.ts",
+        "docs/limits-architecture.md",
+        "agent-changes.json"
+      ],
+      "details": "External review caught: buyable<bet forced full drain, bricking 25/50/75k chips (e.g. 86.32k buyable on S4). Fix: (chip && amount<=buyable) || drain. Caught own fixture bug (buyable is PRE-based) + integration single-ctx impossibility (split sTailChip/sTailChipOver). Redeployed devnet (4D9r8...), 25k round-trip live. Docs \u00a78b updated.",
+      "next": "Commit. Remaining pre-mainnet: metadata, upgrade-authority decision, atomic launch (+ optional binary-search live-fire)."
     }
   ]
 }

@@ -1,5 +1,15 @@
 # Project Audit — Variant C (chip-multiple sells)
 
+> Addendum 2026-10-15 (symmetric chips): buys adopted the same 25k-chip rule
+> as sells (S1/S2: 25/50k, S3: to 75k, S4: to 100k; tail drain still buy-only),
+> fixing the S1-fallback maneuver brick (175k bag → 200k cap). Re-verified:
+> 35/35 unit, 18/18 integration, 25k buy+sell round-trip live on pool #2
+> (`3ne95JVjBpryCz41Ro5tHpFRNJuXbXwWcrqMLjCUcgLBqCwXNDGS7jAoefhk5gLEjpwPXeD8bcZtZYMSbFCcqH8Y`,
+> `ZApZrVxegvjbDwKnFsZYSWs5jCh8WjLh9sPnWmDE19TeSPh72poMBe1rTJHHB9wGtZz7kTFsk3saM6MMdXfccaD`).
+> Finding C1 below is UNAFFECTED (tail buys still credit arbitrary remainders;
+> sub-25k dust still waits for graduation). Everything else in §3–§5 stands;
+> read "buys exact" below as "pre-symmetry buys".
+
 Date: 2026-10-15 · Mode: code review + test re-run + live devnet checks.
 Scope: `programs/hook/src/lib.rs` (Variant C: bets 50k/50k/75k/100k, holds
 200k/1M/4.5M/20M, REMAIN 950M/850M/625M, `SELL_STEP` 25k),

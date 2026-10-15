@@ -104,13 +104,13 @@ Supply: **1B, 6 decimals. 775.41M buyable + 224.59M (22.5%) to migration.**
 balance (full supply at launch, **not** buyable: vault_0 = 1B; ~224.59M stays locked
 for migration). Tx split **1,000 / 2,000 / 3,000 / 4,004 + 1 tail = 10,005 total**.
 
-| street | sold range | supply | bet (buy exact) | sell (chips ≤ bet, 25k steps) | hold/wallet | tx to clear |
-|---|---|---|---|---|---|---|
-| S1 preflop | 0→50M | 50M | 50k (4U) | 25k / 50k | 200k (16U) | 1,000 |
-| S2 flop | 50→150M | 100M | 50k (4U) | 25k / 50k | 1M (80U) | 2,000 |
-| S3 turn | 150→375M | 225M | 75k (6U) | 25k / 50k / 75k | 4.5M (360U) | 3,000 |
-| S4 river | 375M→migrate | 400.41M | 100k (8U) | 25k / 50k / 75k / 100k | 20M (1,600U) | 4,004 + tail 11.32k |
-| total | | 775.41M | | | | 10,004 + 1 tail |
+| street | sold range | supply | chips (buy/sell, 25k steps) | hold/wallet | tx to clear (at max chip) |
+|---|---|---|---|---|---|
+| S1 preflop | 0→50M | 50M | 25k / 50k | 200k (16U) | 1,000 |
+| S2 flop | 50→150M | 100M | 25k / 50k | 1M (80U) | 2,000 |
+| S3 turn | 150→375M | 225M | 25k / 50k / 75k | 4.5M (360U) | 3,000 |
+| S4 river | 375M→migrate | 400.41M | 25k / 50k / 75k / 100k | 20M (1,600U) | 4,004 + tail 11.32k |
+| total | | 775.41M | | | 10,004 + 1 tail (min chips: more txs, same supply) |
 
 Remaining thresholds in code (vault scale): `REMAIN_S1_MIN = 950M`, `S2 = 850M`,
 `S3 = 625M` (tokens → ×1e6 base units). Holds rise monotonically (0.02% / 0.1% /
@@ -118,24 +118,24 @@ Remaining thresholds in code (vault scale): `REMAIN_S1_MIN = 950M`, `S2 = 850M`,
 Max bag 20M = 2% supply.
 
 Hook checks per transfer (`programs/hook/src/lib.rs`, §8):
-buy `amount == tier.bet` else `InvalidBetSize`;
-sell `0 < amount <= tier.bet && amount % SELL_STEP == 0` else `InvalidBetSize`
-(chip multiples — any earlier bag exits on any later street: 50k bag sells once
-on S3/S4, 200k bag exits S4 as 2×100k);
+`0 < amount <= tier.max && amount % SELL_STEP == 0` else `InvalidBetSize`
+(same chip rule both directions — streets are reversible, so the chip set
+must divide every balance reachable on any street);
 on buy `destination.amount + amount <= tier.hold` else `ExceedsHold`.
 Tail exception (buys only): `HookConfig.migration_lock` = base units locked for
 migration (`vault_0 - buyable_0`, computed off-chain at pool creation, required
-> 0). When `vault - lock < bet`, the buy must drain (almost) all of it:
+> 0). Once buyable drops below the street max, fitting chips keep working;
+only when no chip fits (buyable < 25k) must the buy drain (almost) all of it:
 `0 < amount <= vault - lock`, leaving at most `TAIL_DUST_CAP` (10_000 raw units
 = 0.01 token)
 undrained — DBC sqrt-price rounding leaves a few hundred raw units no ExactOut
 can source (measured 459 on devnet), and the final buy's cost still crosses the
 migration threshold. Sells need no tail rule (they grow the vault, never drain
 it). Without a lock (pre-upgrade accounts)
-the hook stays strict `==` on buys forever. Rationale: buyable is never an exact
-multiple of the bet, so strict `==` makes graduation mathematically impossible;
-the tail rule restores possible graduation while keeping chip discipline on
-~99.99% of the curve.
+the hook stays max-chip-only on buys forever. Rationale: buyable is never an exact
+multiple of the max chip, so max-only buys would make graduation mathematically
+impossible; the tail rule restores possible graduation while keeping chip
+discipline on ~99.99% of the curve.
 
 ---
 
@@ -197,17 +197,18 @@ and grow holds only.
 
 ## 6. Implementation status
 
-- `programs/hook/src/lib.rs`: done — Variant C (bets 50k/50k/75k/100k, holds
-  200k/1M/4.5M/20M, REMAIN 950M/850M/625M, SELL_STEP 25k; buys exact + tail
-  drain, sells 25k chip multiples ≤ bet), config PDA (immutable pool,
-  graduating DBC), extra-metas init, `transfer_hook` + `fallback`, DBC
-  owner/discriminator check, token-mint cross-check, mock-pool helper for tests.
-- `cargo test -p hook --features local-test`: **34/34 pass** (tier bounds incl.
-  625M border, buys exact/wrong/hold/authority, sell chips 25k/50k/75k/100k +
-  over-bet/non-chip reverts, P2P, tail-dust, owner/disc/mint/vault cases).
-  `local-test` gates `init_mock_pool` + mock branches; MAINNET builds use plain
-  `anchor build` (mocks compiled out).
-- `tests/hook.ts`: **17/17 pass** on local validator (run via
+- `programs/hook/src/lib.rs`: done — Variant C symmetric chips (S1/S2: 25k/50k,
+  S3: 25k/50k/75k, S4: 25k/50k/75k/100k; same rule both directions + buy-only
+  tail drain), holds 200k/1M/4.5M/20M, REMAIN 950M/850M/625M, SELL_STEP 25k,
+  config PDA (immutable pool, graduating DBC), extra-metas init,
+  `transfer_hook` + `fallback`, DBC owner/discriminator check, token-mint
+  cross-check, mock-pool helper for tests.
+- `cargo test -p hook --features local-test`: **35/35 pass** (tier bounds incl.
+  625M border, buy/sell chips per street + over-max/non-chip reverts,
+  S1 fallback-bag top-up, hold/authority, P2P, tail-dust, owner/disc/mint/vault
+  cases). `local-test` gates `init_mock_pool` + mock branches; MAINNET builds
+  use plain `anchor build` (mocks compiled out).
+- `tests/hook.ts`: **18/18 pass** on local validator (run via
   `bun --bun node_modules/mocha/bin/_mocha` — plain `mocha` 9 is broken on
   Node 26 / yargs ESM bug; `anchor test` same cause). Validator binary built
   with `anchor build -- --features local-test`, deployed via
@@ -218,12 +219,15 @@ and grow holds only.
 
 ## 7. Remaining decisions / risks
 
-1. Bet `==` exact vs `<=` max — DECIDED: hybrid. Buys strict `==` everywhere,
-   except the tail drain (`vault - migration_lock < bet`); sells are 25k chip
-   multiples `<= bet` (`programs/hook/src/lib.rs` §8, 34/34 unit + 17/17
-   integration pass). Rationale: exact sells on rising bets bricked small
-   early bags (a 50k bag can never make a `== 75k` sell); chip-multiple sells
-   let any bag exit on any later street while keeping fixed-chip discipline.
+1. Bet `==` exact vs `<=` max — DECIDED: symmetric spread-limit chips. Every
+   street trades 25k multiples up to its max (S1/S2: 25/50k, S3: to 75k, S4:
+   to 100k), buys and sells alike; tail drain stays buy-only
+   (`programs/hook/src/lib.rs` §8, 35/35 unit + 18/18 integration pass).
+   Rationale: streets are reversible (sells push the vault back), so one-sided
+   exactness bricks maneuvering — first exact sells stranded small early bags,
+   then exact buys stranded fallback bags (175k on S1 could never top up to
+   the 200k cap). Chip symmetry keeps every balance maneuverable on every
+   street while per-tx caps hold.
    Mid-curve fomo `ExactIn` buys still revert — accepted (separate UX issue,
    needs ExactOut terminal).
 2. Accept S1 dust preflop — DECIDED: keep start $10k ($0.50 first bets),
@@ -277,6 +281,16 @@ Production hook (bets 50k/50k/75k/100k, 25k chip sells) redeployed to devnet,
   `3LcKXBiEWochQeMWfDDAUfgqDeb2z4AE7yrv4E3ePFEF21NiF4xjEeukkpUxKHMb8tXheL6uHh5SqN7t6mLZRXMh`),
   P2P `transferCheckedWithTransferHook` reverted `P2PBlocked`. Scripts:
   `scripts/spotcheck-pool2.ts`.
+* Symmetric-chip upgrade (same pool #2, S1): ExactOut 25k buy pass
+  (`3ne95JVjBpryCz41Ro5tHpFRNJuXbXwWcrqMLjCUcgLBqCwXNDGS7jAoefhk5gLEjpwPXeD8bcZtZYMSbFCcqH8Y`)
+  + 25k sell back
+  (`ZApZrVxegvjbDwKnFsZYSWs5jCh8WjLh9sPnWmDE19TeSPh72poMBe1rTJHHB9wGtZz7kTFsk3saM6MMdXfccaD`)
+  — full 25k round-trip on a live pool.
+* Tail-zone chip fix (same code, redeployed `4D9r8RinhKE4F2H1qKacsG5r2DG1hX9XZFEjFaEjnYe9LMLA2vtDUaWwXVzJafFCbDgb2zj1dq4c9JhBJCvCeys1`):
+  buys below the street max but fitting buyable no longer force a drain —
+  `(chip && amount ≤ buyable) || drain`; 25k round-trip re-verified live
+  (`3bv7WLQDtgkywVURnvJU64gjRRWr6NoekxgGuLgD6Zf3kueaRFQksyaMG2sixGovAW76XskfmKgXS8ARC1LaRBLU`,
+  `4minULc7a1v4kcqHyoFuUSivEgMiaus9rUK4Ysfi2qQpHhjLFqJ1jAfMXBrC1cPDA6vphYNfjoJYKwBk4qkBrjio`).
 * Tiny #3 (reused tiny DBC config `GPduPehufvwcwFK4mmDck3VkPRuD8uBEEXapV8iNhuWR`):
   pool `6E7A4Tz8hMorGTfMqQ6btr8HAXvPmUsZoHw3rzHb73XG`,
   mint `Fhjn1z1XsXSxDWTKM8JJaUmx88GdyCBYcQxQ3p2n41JM`,

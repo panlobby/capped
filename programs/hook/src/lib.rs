@@ -348,28 +348,29 @@ fn execute_checks(
         }
     }
 
-    // 8. Bet size. Buys: exact street bet, except the tail: when less than
-    // one bet is left buyable, the buy must drain (almost) all of it — DBC
-    // rounding leaves dust (<= TAIL_DUST_CAP) that no ExactOut can source,
-    // so the final buy may leave at most dust above the lock.
-    // Sells (user -> vault, they grow the vault, never drain it): chip
-    // multiples — any multiple of SELL_STEP (25k) up to the street bet:
-    // S1/S2 (bet 50k): 25k | 50k; S3 (bet 75k): 25k | 50k | 75k;
-    // S4 (bet 100k): 25k | 50k | 75k | 100k. Lets any earlier bag
-    // (50k, 200k, ...) exit on any later street without stuck dust.
+    // 8. Chips. Every street trades fixed 25k-multiple chips up to the street
+    // max: S1/S2: 25k | 50k; S3: 25k | 50k | 75k; S4: 25k | 50k | 75k | 100k.
+    // Buys and sells share the chip rule. Streets are reversible (sells push
+    // the vault back across borders), so the chip set must divide every
+    // balance reachable on any street — 25k does (all bets, holds and
+    // thresholds are multiples of it). Without buy chips, wallets get
+    // maneuver-bricked (e.g. 175k on S1: +50k overshoots the 200k hold).
+    // Tail (buys only): once buyable drops below the street max, the end of
+    // the curve is near — but chips that still fit keep working (e.g. 25k of
+    // 86.32k buyable). Only when no chip fits (buyable < 25k) must the buy
+    // drain (almost) all of it: DBC rounding leaves dust (<= TAIL_DUST_CAP)
+    // that no ExactOut can source, so the final buy may leave at most dust
+    // above the lock. Sells (user -> vault) grow the vault, never drain it.
+    let is_chip = amount > 0 && amount <= bet && amount % SELL_STEP == 0;
     if src_is_pool {
-        if migration_lock > 0 && buyable < bet {
-            require!(amount > 0 && amount <= buyable, ErrorCode::InvalidBetSize);
-            require!(
-                remaining.saturating_sub(migration_lock) <= TAIL_DUST_CAP,
-                ErrorCode::InvalidBetSize
-            );
-        } else {
-            require!(amount > 0 && amount == bet, ErrorCode::InvalidBetSize);
-        }
+        let is_tail = migration_lock > 0
+            && buyable < bet
+            && amount > 0
+            && amount <= buyable
+            && remaining.saturating_sub(migration_lock) <= TAIL_DUST_CAP;
+        require!((is_chip && amount <= buyable) || is_tail, ErrorCode::InvalidBetSize);
     } else {
-        require!(amount > 0 && amount <= bet, ErrorCode::InvalidBetSize);
-        require!(amount % SELL_STEP == 0, ErrorCode::InvalidBetSize);
+        require!(is_chip, ErrorCode::InvalidBetSize);
     }
     if src_is_pool {
         // Buy: vault -> user. Authority must be pool authority (DBC signs).
@@ -587,7 +588,7 @@ pub enum ErrorCode {
     WrongConfig,
     #[msg("wrong pool account")]
     WrongPool,
-    #[msg("bet size must be the street bet (buys) or a 25k chip up to it (sells)")]
+    #[msg("amount must be a 25k chip up to the street max")]
     InvalidBetSize,
     #[msg("receiver hold cap exceeded")]
     ExceedsHold,
@@ -863,9 +864,12 @@ mod tests {
     }
 
     #[test]
-    fn s1_buy_exact_passes() {
+    fn s1_buy_chips_pass() {
+        // S1 max 50k: 50k and 25k chips pass.
         let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 1_000_000_000_000_000, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S1).is_ok());
+        let mut f2 = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
+        assert!(f2.run(POOL_AUTHORITY, SELL_STEP).is_ok());
     }
 
     #[test]
@@ -891,30 +895,56 @@ mod tests {
     }
 
     #[test]
-    fn s2_buy_50k_passes_75k_reverts() {
+    fn s2_buy_chips_pass_75k_reverts() {
+        // S2 max 50k: 50k and 25k pass, 75k exceeds the street max.
         let mut f = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
         assert!(f.run(POOL_AUTHORITY, BET_S2).is_ok());
         let mut f2 = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
-        let err = f2.run(POOL_AUTHORITY, BET_S3).unwrap_err();
+        assert!(f2.run(POOL_AUTHORITY, SELL_STEP).is_ok());
+        let mut f3 = Fixture::new(S2_REM, POOL_AUTHORITY, 0, key(62), 0, true, 0);
+        let err = f3.run(POOL_AUTHORITY, BET_S3).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
-    fn s3_buy_75k_passes_50k_reverts() {
-        let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
-        assert!(f.run(POOL_AUTHORITY, BET_S3).is_ok());
+    fn s3_buy_chips_pass_100k_reverts() {
+        // S3 max 75k: 25k/50k/75k pass, 100k exceeds the street max.
+        let user = key(60);
+        for amt in [SELL_STEP, 50_000_000_000, BET_S3] {
+            let mut f = Fixture::new(S3_REM, POOL_AUTHORITY, 0, user, 0, true, 0);
+            assert!(f.run(POOL_AUTHORITY, amt).is_ok());
+        }
         let mut f2 = Fixture::new(S3_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
-        let err = f2.run(POOL_AUTHORITY, BET_S1).unwrap_err();
+        let err = f2.run(POOL_AUTHORITY, BET_S4).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]
-    fn s4_buy_100k_passes_75k_reverts() {
-        let mut f = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(60), 0, true, 0);
-        assert!(f.run(POOL_AUTHORITY, BET_S4).is_ok());
+    fn s4_buy_chips_pass_125k_reverts() {
+        // S4 max 100k: 25k/50k/75k/100k pass, 125k exceeds, 30k is no chip.
+        let user = key(60);
+        for amt in [SELL_STEP, 50_000_000_000, 75_000_000_000, BET_S4] {
+            let mut f = Fixture::new(S4_REM, POOL_AUTHORITY, 0, user, 0, true, 0);
+            assert!(f.run(POOL_AUTHORITY, amt).is_ok());
+        }
         let mut f2 = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(61), 0, true, 0);
-        let err = f2.run(POOL_AUTHORITY, BET_S3).unwrap_err();
+        let err = f2.run(POOL_AUTHORITY, 125_000_000_000).unwrap_err();
         assert_eq!(err, ErrorCode::InvalidBetSize.into());
+        let mut f3 = Fixture::new(S4_REM, POOL_AUTHORITY, 0, key(62), 0, true, 0);
+        let err = f3.run(POOL_AUTHORITY, 30_000_000_000).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn s1_fallback_bag_tops_up_to_cap() {
+        // Maneuver brick without buy chips: 175k bag back on S1 (hold 200k).
+        // +25k lands the cap exactly (post 200k); +50k overshoots (post 225k).
+        // dst fixture carries the POST-credit balance the hook observes.
+        let mut f = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(60), HOLD_S1, true, 0);
+        assert!(f.run(POOL_AUTHORITY, SELL_STEP).is_ok());
+        let mut f2 = Fixture::new(S1_REM, POOL_AUTHORITY, 0, key(61), 225_000_000_000, true, 0);
+        let err = f2.run(POOL_AUTHORITY, BET_S1).unwrap_err();
+        assert_eq!(err, ErrorCode::ExceedsHold.into());
     }
 
     #[test]
@@ -971,6 +1001,36 @@ mod tests {
         let mut f = Fixture::new(S4_REM, key(60), 100_000_000_000, key(61), 0, true, 0);
         let err = f.run(key(60), BET_S4).unwrap_err();
         assert_eq!(err, ErrorCode::P2PBlocked.into());
+    }
+
+    #[test]
+    fn tail_zone_chip_buy_passes() {
+        // S4 tail zone (buyable 86.32k < 100k max): fitting chips still work.
+        // post 136.32k + 50k in flight => pre 186.32k, buyable 86.32k.
+        let mut f = Fixture::new(136_320_000_000, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        assert!(f.run(POOL_AUTHORITY, 50_000_000_000).is_ok());
+        let mut f2 = Fixture::new(136_320_000_000, POOL_AUTHORITY, 0, key(61), 0, true, TAIL_LOCK);
+        assert!(f2.run(POOL_AUTHORITY, SELL_STEP).is_ok());
+    }
+
+    #[test]
+    fn tail_zone_chip_over_buyable_reverts() {
+        // pre 186.32k, buyable 86.32k < 100k max: 100k chip shape is fine but
+        // 100k > 86.32k buyable, and it is no drain either (100k > buyable)
+        // => revert. Only fitting chips (<= 86.32k) or the drain may land.
+        let mut f = Fixture::new(86_320_000_000, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        let err = f.run(POOL_AUTHORITY, BET_S4).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
+    }
+
+    #[test]
+    fn dust_zone_only_drain_passes() {
+        // Buyable 7k < 25k min chip: 25k chip reverts (25k > 7k buyable, and
+        // no drain since 25k > 7k), while the 7k drain passes (see
+        // tail_buy_remainder_passes). post 82k: pre 107k, buyable 7k.
+        let mut f = Fixture::new(82_000_000_000, POOL_AUTHORITY, 0, key(60), 0, true, TAIL_LOCK);
+        let err = f.run(POOL_AUTHORITY, SELL_STEP).unwrap_err();
+        assert_eq!(err, ErrorCode::InvalidBetSize.into());
     }
 
     #[test]

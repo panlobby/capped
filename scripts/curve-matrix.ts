@@ -191,10 +191,11 @@ for (const amt of [0.05, 0.1, 0.5]) {
   });
   console.log(`  ${amt} SOL -> [${row.join(" | ")}]`);
 }
-console.log("\n--- ExactOut: SOL cost for hook bet size ---");
+console.log("\n--- ExactOut: SOL cost per street chip (25k min + max chip) ---");
 snaps.forEach((s, i) => {
-  const r: any = getSwapResultFromExactOutput(vp(s.sqrt, s.quote) as any, poolConfig, tok(bets[i]), feeMode, TradeDirection.QuoteToBase, ZERO, false);
-  console.log(`  ${streets[i]} bet ${bets[i].toLocaleString()} tok costs ${fmtSol(r.includedFeeInputAmount)} SOL (mcap $${Math.round(s.mcap).toLocaleString()})`);
+  const rMax: any = getSwapResultFromExactOutput(vp(s.sqrt, s.quote) as any, poolConfig, tok(bets[i]), feeMode, TradeDirection.QuoteToBase, ZERO, false);
+  const rMin: any = getSwapResultFromExactOutput(vp(s.sqrt, s.quote) as any, poolConfig, tok(25_000), feeMode, TradeDirection.QuoteToBase, ZERO, false);
+  console.log(`  ${streets[i]} max ${bets[i].toLocaleString()} tok costs ${fmtSol(rMax.includedFeeInputAmount)} SOL / min 25,000 tok costs ${fmtSol(rMin.includedFeeInputAmount)} SOL (mcap $${Math.round(s.mcap).toLocaleString()})`);
 });
 if (tailSnap) {
   const r: any = getSwapResultFromExactOutput(vp(tailSnap.sqrt, tailSnap.quote) as any, poolConfig, tok(100_000), feeMode, TradeDirection.QuoteToBase, ZERO, false);
