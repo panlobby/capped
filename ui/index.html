@@ -896,6 +896,7 @@
       </span>
       <button type="button" id="btn-state" class="btn-sm">Refresh state</button>
       <button type="button" id="btn-connect" class="btn-ink">Connect Phantom</button>
+      <button type="button" id="btn-disconnect" class="btn-sm" style="display:none;" title="Disconnect Phantom wallet">Disconnect</button>
     </div>
   </header>
 
@@ -1051,7 +1052,7 @@
 
         <div class="quote-panel" id="buy-quote-box">
           <div class="quote-row">
-            <span>Selected buy chip</span>
+            <span id="quote-chip-label">Selected buy chip</span>
             <strong id="quote-chip-amt">50,000 tokens</strong>
           </div>
           <div class="quote-row">
@@ -1079,7 +1080,6 @@
 
       <div class="action-row">
         <button type="button" id="btn-buy" class="btn-primary">Buy Selected Chip</button>
-        <button type="button" id="btn-tail" disabled title="Unlocks only when buyable remainder drops below 25,000 tokens">Drain Tail (&lt;25k left)</button>
       </div>
     </section>
 

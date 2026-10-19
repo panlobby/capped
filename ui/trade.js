@@ -233,11 +233,37 @@ function updateStreetStepper(activeStreet) {
   });
 }
 
+function inDrainMode() {
+  return Boolean(S && S.lock.gt(new BN(0)) && S.buyable.lt(SELL_STEP) && S.buyable.gt(new BN(0)));
+}
+
 function updateQuoteBoxes() {
   const slipPct = Math.max(0, Number($("slip").value || "10"));
-  // Buy quote box
-  if (buyChip) {
+  const drain = inDrainMode();
+
+  if (drain) {
+    const drainAmt = tailBest(S.live, S.cfg, S.buyable);
+    $("quote-chip-label").textContent = "Final tail drain (<25k left)";
+    $("quote-chip-amt").textContent = `${fmtTok(drainAmt)} tokens`;
+    $("btn-buy").textContent = `Drain Final Tail & Graduate (${fmtTok(drainAmt)} tokens)`;
+    if (!drainAmt.isZero()) {
+      try {
+        const q = quoteExactOut(S.live, S.cfg, drainAmt);
+        const maxIn = q.includedFeeInputAmount.mul(new BN(100 + slipPct)).div(new BN(100));
+        $("quote-out").textContent = `~${fmtSol(q.includedFeeInputAmount)} SOL`;
+        $("quote-max-sol").textContent = `${fmtSol(maxIn)} SOL (${slipPct}% slip)`;
+      } catch {
+        $("quote-out").textContent = "unquotable";
+        $("quote-max-sol").textContent = "—";
+      }
+    } else {
+      $("quote-out").textContent = "— SOL";
+      $("quote-max-sol").textContent = "— SOL";
+    }
+  } else if (buyChip) {
+    $("quote-chip-label").textContent = "Selected buy chip";
     $("quote-chip-amt").textContent = `${fmtTok(buyChip)} tokens`;
+    $("btn-buy").textContent = "Buy Selected Chip";
     if (S && buyChip.lte(S.buyable)) {
       try {
         const q = quoteExactOut(S.live, S.cfg, buyChip);
@@ -349,7 +375,6 @@ async function refreshState() {
   $("stat-hold").textContent = `${fmtTok(hold)} tokens`;
   $("stat-buyable").textContent = `${fmtTok(buyable)} tokens`;
   $("stat-tail").textContent = tailState;
-  $("btn-tail").disabled = !inDrain;
 
   // Populate legacy state-table for compatibility
   const rows = [
@@ -654,8 +679,9 @@ $("btn-quote").onclick = async () => {
   try {
     if (!S) await refreshState();
     updateQuoteBoxes();
-    const q = quoteExactOut(S.live, S.cfg, buyChip);
-    log(`quote: ${fmtTok(buyChip)} tokens costs ~${fmtSol(q.includedFeeInputAmount)} SOL`);
+    const targetAmt = inDrainMode() ? tailBest(S.live, S.cfg, S.buyable) : buyChip;
+    const q = quoteExactOut(S.live, S.cfg, targetAmt);
+    log(`quote: ${fmtTok(targetAmt)} tokens costs ~${fmtSol(q.includedFeeInputAmount)} SOL`);
   } catch (e) {
     log("quote FAILED: " + errName(e));
   }
@@ -676,8 +702,7 @@ $("slip").oninput = () => {
   updateQuoteBoxes();
 };
 
-$("btn-buy").onclick = () => doBuy();
-$("btn-tail").onclick = () => doDrain();
+$("btn-buy").onclick = () => (inDrainMode() ? doDrain() : doBuy());
 $("btn-sell").onclick = () => doSell(sellChip);
 $("btn-clear-log").onclick = () => { logEl.innerHTML = ""; };
 
@@ -694,6 +719,21 @@ $("btn-copy-link").onclick = async () => {
   }
 };
 
+async function disconnectWallet() {
+  try { await window.solana?.disconnect?.(); } catch { /* ignore */ }
+  walletPk = null;
+  walletBal = null;
+  $("wallet-status").textContent = "Not connected — read-only mode active";
+  $("btn-connect").textContent = "Connect Phantom";
+  $("btn-disconnect").style.display = "none";
+  $("wallet-balances").style.display = "none";
+  $("wallet-hold-box").style.display = "none";
+  $("wallet-table").innerHTML = "";
+  renderBuyBtns();
+  renderSellBtns();
+  log("wallet disconnected");
+}
+
 $("btn-connect").onclick = async () => {
   try {
     if (!window.solana?.isPhantom) throw new Error("Phantom wallet not detected (window.solana missing)");
@@ -701,6 +741,7 @@ $("btn-connect").onclick = async () => {
     walletPk = r.publicKey;
     $("wallet-status").textContent = walletPk.toBase58();
     $("btn-connect").textContent = shortPk(walletPk.toBase58());
+    $("btn-disconnect").style.display = "inline-block";
     log(`wallet connected: ${walletPk.toBase58()}`);
     if (S) {
       await refreshWallet();
@@ -711,6 +752,11 @@ $("btn-connect").onclick = async () => {
     log("connect FAILED: " + errName(e));
   }
 };
+
+$("btn-disconnect").onclick = () => disconnectWallet();
+window.solana?.on?.("disconnect", () => {
+  if (walletPk) disconnectWallet();
+});
 
 // Apply URL query overrides (?cluster=mainnet&pool=...&mint=...&rpc=...)
 (function init() {
