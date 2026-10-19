@@ -1,0 +1,11 @@
+{
+  "name": "Capped",
+  "symbol": "capped",
+  "description": "4-street fixed-chip token on Meteora DBC enforced by an on-chain Token-2022 transfer hook (25k-100k chips, 200k-20M wallet hold caps, P2P blocked until DAMM v2 graduation). Repo & Trade Panel: https://github.com/panlobby/capped",
+  "image": "https://panlobby.github.io/capped/ui/logo.png",
+  "external_url": "https://github.com/panlobby/capped",
+  "website": "https://github.com/panlobby/capped",
+  "extensions": {
+    "website": "https://github.com/panlobby/capped"
+  }
+}

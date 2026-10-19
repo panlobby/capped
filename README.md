@@ -13,10 +13,10 @@ Once the curve fills (~$1M market cap / ~2,245.88 SOL net inflow), the graduatin
 
 | Item | Address |
 | :--- | :--- |
-| **Token Mint (`capped`)** | [`CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE`](https://solscan.io/token/CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE) |
-| **Meteora DBC Pool** | [`7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL`](https://solscan.io/account/7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL) |
+| **Token Mint (`capped`)** | [`CAPwej8kcjwvPuo9iZsqaVZgicPzhVW5Mcu9iyMubX9s`](https://solscan.io/token/CAPwej8kcjwvPuo9iZsqaVZgicPzhVW5Mcu9iyMubX9s) |
+| **Meteora DBC Pool** | [`BXqbqy3ZVeBBZfyPVPpn6xRDG4f7dgCQav2wttCBJgvC`](https://solscan.io/account/BXqbqy3ZVeBBZfyPVPpn6xRDG4f7dgCQav2wttCBJgvC) |
 | **Hook Program** | [`3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH`](https://solscan.io/account/3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH) |
-| **Hook Config PDA** | [`HHMiymv2C5r9LFXGxY3jkDM5h2FiDbTq9v6JfauDW1Df`](https://solscan.io/account/HHMiymv2C5r9LFXGxY3jkDM5h2FiDbTq9v6JfauDW1Df) |
+| **Hook Config PDA** | [`4FS3Ece12mQoNk1HVfoQr7u93BbSPXpxFr27GXhgFK85`](https://solscan.io/account/4FS3Ece12mQoNk1HVfoQr7u93BbSPXpxFr27GXhgFK85) |
 | **Trade Panel (GitHub Pages)** | [`https://panlobby.github.io/capped/ui/`](https://panlobby.github.io/capped/ui/) |
 
 ---

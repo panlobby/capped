@@ -48,8 +48,8 @@ const PRESETS = {
   },
   mainnet: {
     rpc: "https://solana-rpc.publicnode.com",
-    pool: "7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL",
-    mint: "CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE",
+    pool: "BXqbqy3ZVeBBZfyPVPpn6xRDG4f7dgCQav2wttCBJgvC",
+    mint: "CAPwej8kcjwvPuo9iZsqaVZgicPzhVW5Mcu9iyMubX9s",
     hook: "3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH",
   },
 };
