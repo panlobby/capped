@@ -3,18 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Capped Token — transparent devnet trade panel (chip streets)</title>
+<title>capped — fixed-chip token on Meteora DBC</title>
+<meta name="description" content="A capped token on Meteora DBC with a Token-2022 transfer hook. Every trade is a fixed 25k-multiple chip.">
+<link rel="icon" type="image/svg+xml" href="./logo.svg">
 <!--
   Static only: no backend, no Helius, no build step. Open this file and
   trade.js in the repo to see everything under the hood.
   Versions pinned to match bun.lock resolved versions (2026-10-15):
   web3.js 1.99.0, DBC SDK 1.5.13, spl-token 0.4.15, bn.js 5.2.5.
-  Read-only state needs no wallet. Trading needs Phantom (devnet) opt-in.
+  Read-only state needs no wallet. Trading needs Phantom opt-in.
   Rules: every street trades 25k-multiple chips up to the street max
   (S1/S2: 25k|50k, S3: +75k, S4: +100k) — buys AND sells. Tail drain only
   when buyable < 25k. Test checklist: chip buys pass, wrong-size (30k)
   reverts InvalidBetSize, chip sells pass, wallet-to-wallet reverts P2PBlocked.
 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script type="importmap">
 {
   "imports": {
@@ -26,71 +31,1215 @@
 }
 </script>
 <style>
-  body { font-family: monospace; max-width: 860px; margin: 2em auto; padding: 0 1em; }
-  section { border: 1px solid #ccc; padding: 1em; margin-bottom: 1em; }
-  table td { padding: 2px 10px 2px 0; vertical-align: top; }
-  button { margin: 2px; }
-  button:disabled { opacity: 0.4; }
-  button.sel { outline: 2px solid #000; }
-  #log { white-space: pre-wrap; background: #f6f6f6; padding: 1em; min-height: 4em; }
-  .warn { color: #a00; }
-  input[type=text] { width: 100%; }
+  :root {
+    /* muse-spark-1.3-contributor brand tokens */
+    --bg: #F3EDE1;
+    --surface: #FAF6EE;
+    --surface-alt: #EAE2D3;
+    --surface-dark: #15130F;
+    --ink: #15130F;
+    --ink-muted: #5C5449;
+    --ink-faint: #877E70;
+    --accent: #C8501E;
+    --accent-hover: #AD4115;
+    --accent-soft: rgba(200, 80, 30, 0.12);
+    --accent-border: rgba(200, 80, 30, 0.42);
+    --border: #D8CFC0;
+    --border-strong: #15130F;
+    --ok: #1E6B41;
+    --ok-soft: rgba(30, 107, 65, 0.12);
+    --warn: #B25016;
+    --err: #A82424;
+    --err-soft: rgba(168, 36, 36, 0.12);
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 16px;
+    --font-sans: "Archivo", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--accent);
+    text-underline-offset: 3px;
+    transition: color 0.15s ease;
+  }
+  a:hover { color: var(--accent); }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--surface-alt);
+    padding: 0.15em 0.4em;
+    border-radius: 5px;
+  }
+
+  .shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 24px 20px 64px;
+  }
+
+  /* ---- Top Brand Bar ---- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 20px;
+    margin-bottom: 22px;
+    border-bottom: 2px solid var(--ink);
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .brand-mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .brand-mark svg {
+    width: 44px;
+    height: 44px;
+    display: block;
+  }
+
+  .brand-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .wordmark {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 28px;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .tagline {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    margin: 3px 0 0;
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* ---- Cluster Pill Switcher ---- */
+  .cluster-switch {
+    display: inline-flex;
+    background: var(--surface-alt);
+    border: 1.5px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 2px;
+  }
+
+  .cluster-btn {
+    border: none;
+    background: transparent;
+    color: var(--ink-muted);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    margin: 0;
+    transition: all 0.15s ease;
+  }
+
+  .cluster-btn.active {
+    background: var(--ink);
+    color: var(--bg);
+  }
+
+  .cluster-btn.active[data-cluster="devnet"] {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* ---- Buttons ---- */
+  button {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 14px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--ink);
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  button:hover:not(:disabled) {
+    background: var(--surface-alt);
+  }
+
+  button:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  button:disabled {
+    opacity: 0.42;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--ink);
+    font-weight: 700;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .btn-ink {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+    font-weight: 700;
+  }
+
+  .btn-ink:hover:not(:disabled) {
+    background: #2b2720;
+  }
+
+  .btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  /* ---- Status Pill ---- */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--ink-muted);
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+  }
+  .status-dot.ok { background: var(--ok); }
+  .status-dot.busy { background: var(--accent); animation: pulse 1s infinite; }
+  .status-dot.err { background: var(--err); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  /* ---- Cards & Ceiling Bar Accent ---- */
+  .card {
+    background: var(--surface);
+    border: 1.5px solid var(--ink);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 3px 0 var(--ink);
+    position: relative;
+  }
+
+  .card-ceiling {
+    border-top: 6px solid var(--accent);
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .card-title {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--surface-alt);
+    color: var(--ink);
+    border: 1px solid var(--border);
+  }
+
+  .badge-accent {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--ink);
+  }
+
+  .badge-ok {
+    background: var(--ok-soft);
+    color: var(--ok);
+    border-color: var(--ok);
+  }
+
+  .badge-warn {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* ---- Street Stepper ---- */
+  .street-stepper {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  @media (max-width: 720px) {
+    .street-stepper { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .street-step {
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    transition: all 0.15s ease;
+    position: relative;
+  }
+
+  .street-step.done {
+    border-color: var(--ink);
+    background: var(--surface-alt);
+  }
+
+  .street-step.active {
+    border: 2px solid var(--ink);
+    border-top: 5px solid var(--accent);
+    background: var(--surface);
+    box-shadow: 0 2px 0 var(--ink);
+  }
+
+  .street-step-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .street-code {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .street-name {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-muted);
+  }
+
+  .street-step.active .street-name {
+    color: var(--accent);
+  }
+
+  .street-meta {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    line-height: 1.45;
+  }
+
+  .street-meta strong {
+    color: var(--ink);
+  }
+
+  /* ---- Progress Meters ---- */
+  .meters-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+
+  @media (max-width: 720px) {
+    .meters-grid { grid-template-columns: 1fr; }
+  }
+
+  .meter-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+  }
+
+  .meter-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+
+  .meter-val {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+
+  .meter-track {
+    width: 100%;
+    height: 10px;
+    background: var(--surface-alt);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .meter-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--ink);
+    border-radius: 999px;
+    transition: width 0.25s ease;
+  }
+
+  .meter-fill.accent {
+    background: var(--accent);
+  }
+
+  /* ---- Key Telemetry Pills ---- */
+  .telemetry-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  @media (max-width: 720px) {
+    .telemetry-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .stat-cell {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    margin-bottom: 3px;
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  /* ---- Wallet Banner ---- */
+  .wallet-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    background: var(--surface);
+    border: 1.5px solid var(--ink);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    box-shadow: 0 3px 0 var(--ink);
+  }
+
+  .wallet-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .wallet-hold-meter {
+    flex: 1;
+    min-width: 220px;
+    max-width: 380px;
+  }
+
+  /* ---- Two-Column Trade Deck ---- */
+  .trade-deck {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  @media (max-width: 820px) {
+    .trade-deck { grid-template-columns: 1fr; }
+  }
+
+  .trade-card {
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .subcopy {
+    font-size: 13px;
+    color: var(--ink-muted);
+    margin: 0 0 14px;
+  }
+
+  /* ---- Poker Chip Buttons ---- */
+  .chip-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .chip-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--ink);
+    background: var(--bg);
+    text-align: left;
+    position: relative;
+    overflow: hidden;
+    margin: 0;
+  }
+
+  .chip-btn::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--ink);
+    opacity: 0.2;
+  }
+
+  .chip-btn.sel {
+    background: var(--surface);
+    border: 2px solid var(--ink);
+    box-shadow: 0 2px 0 var(--ink);
+  }
+
+  .chip-btn.sel::before {
+    height: 5px;
+    background: var(--accent);
+    opacity: 1;
+  }
+
+  .chip-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    margin-bottom: 4px;
+  }
+
+  .chip-amt {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .chip-tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--surface-alt);
+    color: var(--ink-muted);
+  }
+
+  .chip-btn.sel .chip-tag {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .chip-quote {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+
+  /* ---- Quote Box & Controls ---- */
+  .quote-panel {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+
+  .quote-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 0;
+  }
+
+  .quote-row span:first-child {
+    color: var(--ink-muted);
+  }
+
+  .quote-row strong {
+    color: var(--ink);
+  }
+
+  .slip-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: var(--ink-muted);
+    flex-wrap: wrap;
+  }
+
+  .slip-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .slip-preset {
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .slip-preset.active {
+    background: var(--ink);
+    color: var(--bg);
+  }
+
+  input[type="text"], input[type="number"] {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border);
+    background: var(--bg);
+    color: var(--ink);
+    width: 100%;
+  }
+
+  input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .action-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .action-row button {
+    flex: 1;
+    padding: 11px 16px;
+    font-size: 14px;
+  }
+
+  /* ---- Details / Accordion ---- */
+  details.card {
+    padding: 14px 20px;
+  }
+
+  details.card summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  details.card summary::-webkit-details-marker { display: none; }
+
+  .summary-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-muted);
+  }
+
+  .conn-grid {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 10px 14px;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 600px) {
+    .conn-grid { grid-template-columns: 1fr; gap: 6px; }
+  }
+
+  .conn-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--ink-muted);
+  }
+
+  /* ---- Rules & Streets Table ---- */
+  .rules-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 18px;
+  }
+
+  @media (max-width: 820px) {
+    .rules-grid { grid-template-columns: 1fr; }
+  }
+
+  .spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .spec-table th, .spec-table td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .spec-table th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    font-weight: 700;
+  }
+
+  .spec-table td {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+
+  .rules-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 13.5px;
+    color: var(--ink-muted);
+  }
+
+  .rules-list li {
+    margin-bottom: 7px;
+  }
+
+  .rules-list strong {
+    color: var(--ink);
+  }
+
+  /* ---- Log Console ---- */
+  #log {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--surface-dark);
+    color: #F3EDE1;
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    min-height: 110px;
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1.5px solid var(--ink);
+  }
+
+  #log a {
+    color: #FF8B5E;
+  }
+
+  .footer {
+    margin-top: 28px;
+    padding-top: 18px;
+    border-top: 1.5px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }
 </style>
 </head>
 <body>
-<h1>Capped Token — devnet trade panel (chip streets)</h1>
-<p>
-  Open source, static page. Source: <code>ui/index.html</code> + <code>ui/trade.js</code>
-  in this repo. Constants: <code>ui/variant-c.json</code>. Devnet addresses: <code>ui/devnet.json</code>.
-  Hook: <code>programs/hook/src/lib.rs</code>. No backend, no Helius — browser talks to Solana RPC directly.
-</p>
+<div class="shell">
 
-<section>
-<h2>1. Connection (read-only, no wallet)</h2>
-<table>
-<tr><td>RPC</td><td><input type="text" id="rpc" value="https://api.devnet.solana.com"></td></tr>
-<tr><td>Pool</td><td><input type="text" id="pool" value="GDb8yv3CEBQpsUuthMatW5zMp9RCTiamigpCZjJfN4VZ"></td></tr>
-<tr><td>Mint</td><td><input type="text" id="mint" value="JBaZd2GNaV5Fmv3UVd4s2SP4bXQ22vWoQqbZdJ4fi2Jk"></td></tr>
-<tr><td>Hook program</td><td><input type="text" id="hook" value="3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH"></td></tr>
-</table>
-<p><button id="btn-state">Refresh state</button> <span id="state-status"></span></p>
-<table id="state-table"></table>
-</section>
+  <!-- Top Brand Header -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" title="capped — ceiling mark">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true">
+          <rect width="512" height="512" fill="#F3EDE1"/>
+          <rect x="164.25" y="175.71" width="183.5" height="43.0" rx="17.2" fill="#C8501E"/>
+          <rect x="207.25" y="241.0" width="97.5" height="98.0" rx="29.0" fill="#15130F"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">
+          <h1 class="wordmark">capped</h1>
+          <span class="badge badge-accent">limit-holdem hook</span>
+        </div>
+        <p class="tagline">A capped token on Meteora DBC with a hook — every trade is a fixed 25k-multiple chip.</p>
+      </div>
+    </div>
 
-<section>
-<h2>2. Wallet (opt-in, Phantom devnet only)</h2>
-<p><button id="btn-connect">Connect Phantom</button> <span id="wallet-status">not connected</span></p>
-<table id="wallet-table"></table>
-</section>
+    <div class="topbar-actions">
+      <div class="cluster-switch" role="group" aria-label="Solana cluster">
+        <button type="button" class="cluster-btn active" data-cluster="devnet" id="cluster-devnet">Devnet</button>
+        <button type="button" class="cluster-btn" data-cluster="mainnet" id="cluster-mainnet">Mainnet</button>
+      </div>
+      <span class="status-pill" title="RPC & pool state">
+        <span class="status-dot" id="state-dot"></span>
+        <span id="state-status">idle</span>
+      </span>
+      <button type="button" id="btn-state" class="btn-sm">Refresh state</button>
+      <button type="button" id="btn-connect" class="btn-ink">Connect Phantom</button>
+    </div>
+  </header>
 
-<section>
-<h2>3. Buy (25k chips, ExactOut)</h2>
-<p>Pick a chip, quote, buy. Stock ExactIn buys revert <code>InvalidBetSize</code> — this panel
-quotes <code>ExactOut(chip)</code> via the DBC SDK and sends <code>swap2WithTransferHook</code>.</p>
-<p id="buy-btns"></p>
-<p>
-  Slippage % <input type="text" id="slip" value="10" style="width:4em">
-  <button id="btn-quote">Quote selected chip</button> <span id="quote-out"></span>
-</p>
-<p><button id="btn-buy">Buy selected chip</button> <button id="btn-tail">Drain tail (only when buyable &lt; 25k)</button></p>
-</section>
+  <!-- 1. Live Street Stepper & Curve Telemetry -->
+  <section class="card card-ceiling" aria-label="Street progress and pool telemetry">
+    <div class="card-head">
+      <h2 class="card-title">
+        <span>Live Table State</span>
+        <span class="badge badge-accent" id="badge-street">S1 Preflop</span>
+        <span class="badge" id="badge-migrated">Curve Live</span>
+      </h2>
+      <div style="font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);">
+        Pool <a id="link-pool-short" href="https://solscan.io/?cluster=devnet" target="_blank" rel="noopener">GDb8…N4VZ</a> ·
+        Mint <a id="link-mint-short" href="https://solscan.io/?cluster=devnet" target="_blank" rel="noopener">JBaZ…i2Jk</a>
+      </div>
+    </div>
 
-<section>
-<h2>4. Sell (25k chips, ExactIn)</h2>
-<p>Sells use the same chip set. Buttons filter automatically to chips ≤ street max.</p>
-<p id="sell-btns"></p>
-</section>
+    <!-- 4-Street Stepper -->
+    <div class="street-stepper" id="street-stepper">
+      <div class="street-step active" data-street="S1">
+        <div class="street-step-top">
+          <span class="street-code">S1</span>
+          <span class="street-name">Preflop</span>
+        </div>
+        <div class="street-meta">
+          Sold: <strong>0 → 50M</strong><br>
+          Chips: <strong>25k / 50k</strong><br>
+          Hold cap: <strong>200k</strong>
+        </div>
+      </div>
+      <div class="street-step" data-street="S2">
+        <div class="street-step-top">
+          <span class="street-code">S2</span>
+          <span class="street-name">Flop</span>
+        </div>
+        <div class="street-meta">
+          Sold: <strong>50M → 150M</strong><br>
+          Chips: <strong>25k / 50k</strong><br>
+          Hold cap: <strong>1M</strong>
+        </div>
+      </div>
+      <div class="street-step" data-street="S3">
+        <div class="street-step-top">
+          <span class="street-code">S3</span>
+          <span class="street-name">Turn</span>
+        </div>
+        <div class="street-meta">
+          Sold: <strong>150M → 375M</strong><br>
+          Chips: <strong>25k / 50k / 75k</strong><br>
+          Hold cap: <strong>4.5M</strong>
+        </div>
+      </div>
+      <div class="street-step" data-street="S4">
+        <div class="street-step-top">
+          <span class="street-code">S4</span>
+          <span class="street-name">River</span>
+        </div>
+        <div class="street-meta">
+          Sold: <strong>375M → 775.4M</strong><br>
+          Chips: <strong>25k / 50k / 75k / 100k</strong><br>
+          Hold cap: <strong>20M (2%)</strong>
+        </div>
+      </div>
+    </div>
 
-<section>
-<h2>5. Log</h2>
-<div id="log"></div>
-<p>
-  Explorer: <a id="link-scan" href="https://solscan.io/?cluster=devnet">solscan devnet</a> ·
-  Security: <code>docs/SECURITY.md</code> · Spec: <code>docs/limits-architecture.md</code>
-</p>
-<p class="warn">Devnet only. Public RPC is rate-limited — paste your own RPC if refreshes fail with 429.</p>
-</section>
+    <!-- Progress Bars -->
+    <div class="meters-grid">
+      <div class="meter-box">
+        <div class="meter-head">
+          <span>Curve Tokens Sold (775.41M buyable)</span>
+          <span class="meter-val" id="meter-sold-label">0 / 775,411,323 (0.00%)</span>
+        </div>
+        <div class="meter-track">
+          <div class="meter-fill accent" id="meter-sold-fill"></div>
+        </div>
+      </div>
+      <div class="meter-box">
+        <div class="meter-head">
+          <span>SOL Reserve → DAMM v2 Graduation</span>
+          <span class="meter-val" id="meter-sol-label">0.0000 / 2,245.88 SOL (0.00%)</span>
+        </div>
+        <div class="meter-track">
+          <div class="meter-fill" id="meter-sol-fill"></div>
+        </div>
+      </div>
+    </div>
 
+    <!-- Telemetry Cells -->
+    <div class="telemetry-grid">
+      <div class="stat-cell">
+        <div class="stat-label">Allowed Chips</div>
+        <div class="stat-value" id="stat-chips">25k | 50k</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Wallet Hold Cap</div>
+        <div class="stat-value" id="stat-hold">200,000 tokens</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Buyable Remainder</div>
+        <div class="stat-value" id="stat-buyable">—</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Tail Zone</div>
+        <div class="stat-value" id="stat-tail">No (normal chip play)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Opt-in Wallet & Hold Cap Bar -->
+  <section class="wallet-bar" aria-label="Wallet and hold cap">
+    <div class="wallet-info">
+      <div>
+        <div class="stat-label">Wallet (Opt-in Phantom)</div>
+        <div class="stat-value" id="wallet-status">Not connected — read-only mode active</div>
+      </div>
+      <div id="wallet-balances" style="display:none; gap:18px; flex-wrap:wrap;">
+        <div>
+          <div class="stat-label">SOL Balance</div>
+          <div class="stat-value" id="wallet-sol">—</div>
+        </div>
+        <div>
+          <div class="stat-label">Token Balance</div>
+          <div class="stat-value" id="wallet-tok">—</div>
+        </div>
+      </div>
+    </div>
+    <div class="wallet-hold-meter" id="wallet-hold-box" style="display:none;">
+      <div class="meter-head">
+        <span>Your Bag vs Street Hold Cap</span>
+        <span class="meter-val" id="wallet-hold-label">0 / 200,000</span>
+      </div>
+      <div class="meter-track">
+        <div class="meter-fill accent" id="wallet-hold-fill"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Trading Deck: Buy (ExactOut) & Sell (ExactIn) -->
+  <div class="trade-deck">
+
+    <!-- Buy Card -->
+    <section class="card trade-card">
+      <div>
+        <div class="card-head">
+          <h2 class="card-title">Buy Chips</h2>
+          <span class="badge badge-warn">SwapMode::ExactOut</span>
+        </div>
+        <p class="subcopy">
+          Stock ExactIn buys revert <code>InvalidBetSize</code>. Pick a 25k-multiple chip below — this panel quotes <code>ExactOut(chip)</code> and sends <code>swap2WithTransferHook</code>.
+        </p>
+
+        <div class="chip-grid" id="buy-btns"></div>
+
+        <div class="quote-panel" id="buy-quote-box">
+          <div class="quote-row">
+            <span>Selected buy chip</span>
+            <strong id="quote-chip-amt">50,000 tokens</strong>
+          </div>
+          <div class="quote-row">
+            <span>Estimated SOL cost</span>
+            <strong id="quote-out">— SOL</strong>
+          </div>
+          <div class="quote-row">
+            <span>Max SOL with slippage</span>
+            <strong id="quote-max-sol">— SOL</strong>
+          </div>
+        </div>
+
+        <div class="slip-row">
+          <span>Max slippage tolerance</span>
+          <div class="slip-controls">
+            <button type="button" class="slip-preset" data-slip="1">1%</button>
+            <button type="button" class="slip-preset" data-slip="5">5%</button>
+            <button type="button" class="slip-preset active" data-slip="10">10%</button>
+            <input type="text" id="slip" value="10" style="width: 54px; text-align: right;" aria-label="Slippage percent">
+            <span style="font-family: var(--font-mono);">%</span>
+            <button type="button" id="btn-quote" class="btn-sm" title="Recalculate quote">Quote</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button type="button" id="btn-buy" class="btn-primary">Buy Selected Chip</button>
+        <button type="button" id="btn-tail" disabled title="Unlocks only when buyable remainder drops below 25,000 tokens">Drain Tail (&lt;25k left)</button>
+      </div>
+    </section>
+
+    <!-- Sell Card -->
+    <section class="card trade-card">
+      <div>
+        <div class="card-head">
+          <h2 class="card-title">Sell Chips</h2>
+          <span class="badge">SwapMode::ExactIn</span>
+        </div>
+        <p class="subcopy">
+          Sells use the exact same 25k-multiple chip sizes up to the street max. Returning tokens to the vault can push the street backward.
+        </p>
+
+        <div class="chip-grid" id="sell-btns"></div>
+
+        <div class="quote-panel">
+          <div class="quote-row">
+            <span>Selected sell chip</span>
+            <strong id="sell-chip-amt">25,000 tokens</strong>
+          </div>
+          <div class="quote-row">
+            <span>Estimated SOL received</span>
+            <strong id="sell-quote-out">— SOL</strong>
+          </div>
+          <div class="quote-row">
+            <span>Min SOL after slippage</span>
+            <strong id="sell-min-sol">— SOL</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button type="button" id="btn-sell" class="btn-ink">Sell Selected Chip</button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- 4. Collapsible RPC & On-Chain Addresses -->
+  <details class="card" id="conn-details">
+    <summary>
+      <span>Connection, RPC &amp; On-Chain Addresses</span>
+      <span class="summary-right">
+        <span id="conn-summary-label">devnet · public RPC</span>
+        <span class="badge">Configure ▾</span>
+      </span>
+    </summary>
+    <div class="conn-grid">
+      <label class="conn-label" for="rpc">Solana RPC URL</label>
+      <input type="text" id="rpc" value="https://api.devnet.solana.com">
+
+      <label class="conn-label" for="pool">DBC Pool</label>
+      <input type="text" id="pool" value="GDb8yv3CEBQpsUuthMatW5zMp9RCTiamigpCZjJfN4VZ">
+
+      <label class="conn-label" for="mint">Base Mint (T22)</label>
+      <input type="text" id="mint" value="JBaZd2GNaV5Fmv3UVd4s2SP4bXQ22vWoQqbZdJ4fi2Jk">
+
+      <label class="conn-label" for="hook">Hook Program</label>
+      <input type="text" id="hook" value="3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH">
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top:14px;">
+      <span style="font-size:12px; color:var(--ink-muted);">
+        Public RPC can rate-limit (HTTP 429). Paste any dedicated RPC endpoint above and click <strong>Refresh state</strong>.
+      </span>
+      <div style="display:flex; gap:8px;">
+        <button type="button" id="btn-copy-link" class="btn-sm">Copy Shareable Pool URL</button>
+        <button type="button" id="btn-apply-conn" class="btn-sm btn-ink">Apply &amp; Refresh</button>
+      </div>
+    </div>
+    <!-- Hidden legacy state/wallet tables preserved for programmatic inspection -->
+    <table id="state-table" style="display:none;"></table>
+    <table id="wallet-table" style="display:none;"></table>
+  </details>
+
+  <!-- 5. Self-Contained Streets & Hook Explainer -->
+  <section class="card">
+    <div class="card-head">
+      <h2 class="card-title">How the Ceiling Hook Works</h2>
+      <span class="badge">100% On-Chain · Token-2022 Transfer Hook</span>
+    </div>
+    <div class="rules-grid">
+      <div>
+        <table class="spec-table">
+          <thead>
+            <tr>
+              <th>Street</th>
+              <th>Sold Range</th>
+              <th>Allowed Chips</th>
+              <th>Max Wallet</th>
+              <th>Min Net Tx</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>S1</strong> Preflop</td>
+              <td>0 → 50M</td>
+              <td>25k / 50k</td>
+              <td>200k</td>
+              <td>1,000</td>
+            </tr>
+            <tr>
+              <td><strong>S2</strong> Flop</td>
+              <td>50M → 150M</td>
+              <td>25k / 50k</td>
+              <td>1M</td>
+              <td>2,000</td>
+            </tr>
+            <tr>
+              <td><strong>S3</strong> Turn</td>
+              <td>150M → 375M</td>
+              <td>25k / 50k / 75k</td>
+              <td>4.5M</td>
+              <td>3,000</td>
+            </tr>
+            <tr>
+              <td><strong>S4</strong> River</td>
+              <td>375M → 775.4M</td>
+              <td>25k / 50k / 75k / 100k</td>
+              <td>20M (2%)</td>
+              <td>4,004 + tail</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <ul class="rules-list">
+          <li><strong>Fixed Chips Only:</strong> Every buy and sell must equal a 25,000-token multiple up to the active street max, or the hook reverts with <code>InvalidBetSize</code>.</li>
+          <li><strong>Hard Wallet Ceiling:</strong> Post-trade wallet balance cannot exceed the street hold cap (max 20M = 2% on S4), or the hook reverts with <code>ExceedsHold</code>.</li>
+          <li><strong>DEX-Only While Live:</strong> Direct wallet-to-wallet transfers revert with <code>P2PBlocked</code>.</li>
+          <li><strong>Reversible Streets:</strong> Sells return tokens to the pool vault and can push the table back to an earlier street.</li>
+          <li><strong>Uncapped Graduation:</strong> Reaching the migration threshold revokes the transfer hook in the same swap and migrates liquidity to Meteora DAMM v2 with no limits after.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Activity Log -->
+  <section class="card">
+    <div class="card-head">
+      <h2 class="card-title">Transaction &amp; Telemetry Log</h2>
+      <button type="button" id="btn-clear-log" class="btn-sm">Clear log</button>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>
+      <strong>capped</strong> — transparent static panel (<code>ui/index.html</code> + <code>ui/trade.js</code> + <code>ui/params.json</code>). No backend, no trackers.
+    </div>
+    <div>
+      Explorer: <a id="link-scan" href="https://solscan.io/?cluster=devnet" target="_blank" rel="noopener">Solscan</a> ·
+      Hook: <code>programs/hook/src/lib.rs</code> ·
+      Spec: <code>docs/limits-architecture.md</code> ·
+      Security: <code>docs/SECURITY.md</code>
+    </div>
+  </footer>
+
+</div>
 <script type="module" src="./trade.js"></script>
 </body>
 </html>

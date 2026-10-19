@@ -9,3 +9,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test -p hook --locked --features local-test
+      - run: node --check ui/trade.js
