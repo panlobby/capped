@@ -1,0 +1,12 @@
+{
+  "cluster": "mainnet-beta",
+  "rpc_default": "https://solana-rpc.publicnode.com",
+  "hook_program": "3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH",
+  "pool": "7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL",
+  "mint": "CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE",
+  "config": "cAPg42b6JGZikhhRmM7v3zNLgvYGtGyZWUboXCNDphs",
+  "config_pda": "HHMiymv2C5r9LFXGxY3jkDM5h2FiDbTq9v6JfauDW1Df",
+  "extra_metas_pda": "53qZGY6SWor5CfXbGFtGFF58kFoqUNQh4Tsbmaj52e2E",
+  "threshold_lamports": "2245879014942",
+  "lock_raw": "224587902495159"
+}

@@ -47,9 +47,9 @@ const PRESETS = {
     hook: "3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH",
   },
   mainnet: {
-    rpc: "https://api.mainnet-beta.solana.com",
-    pool: "",
-    mint: "",
+    rpc: "https://solana-rpc.publicnode.com",
+    pool: "7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL",
+    mint: "CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE",
     hook: "3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH",
   },
 };
@@ -57,7 +57,7 @@ const PRESETS = {
 const $ = (id) => document.getElementById(id);
 const logEl = $("log");
 
-let currentCluster = "devnet";
+let currentCluster = "mainnet";
 let S = null; // last live state snapshot
 let walletPk = null;
 let walletBal = null; // BN token balance when connected

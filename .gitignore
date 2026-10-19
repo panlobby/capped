@@ -11,6 +11,7 @@ dist/
 build/
 
 # Keys and local env
+.keys/
 *.json.bak
 .anchor/program.json
 target/deploy/*-keypair.json

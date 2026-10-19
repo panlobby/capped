@@ -9,6 +9,18 @@ Once the curve fills (~$1M market cap / ~2,245.88 SOL net inflow), the graduatin
 
 ---
 
+## Mainnet Addresses
+
+| Item | Address |
+| :--- | :--- |
+| **Token Mint (`capped`)** | [`CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE`](https://solscan.io/token/CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE) |
+| **Meteora DBC Pool** | [`7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL`](https://solscan.io/account/7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL) |
+| **Hook Program** | [`3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH`](https://solscan.io/account/3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH) |
+| **Hook Config PDA** | [`HHMiymv2C5r9LFXGxY3jkDM5h2FiDbTq9v6JfauDW1Df`](https://solscan.io/account/HHMiymv2C5r9LFXGxY3jkDM5h2FiDbTq9v6JfauDW1Df) |
+| **Trade Panel (GitHub Pages)** | [`https://panlobby.github.io/capped/ui/`](https://panlobby.github.io/capped/ui/) |
+
+---
+
 ## Why Capped?
 
 * **Anti-Snipe by Construction:** Early buyers in Street 1 can only buy `25,000` or `50,000` tokens per transaction and hold at most `200,000` tokens (`0.02%` of supply). Clearing the full curve requires at least **10,004 net buy transactions** across all four streets.

@@ -887,8 +887,8 @@
 
     <div class="topbar-actions">
       <div class="cluster-switch" role="group" aria-label="Solana cluster">
-        <button type="button" class="cluster-btn active" data-cluster="devnet" id="cluster-devnet">Devnet</button>
-        <button type="button" class="cluster-btn" data-cluster="mainnet" id="cluster-mainnet">Mainnet</button>
+        <button type="button" class="cluster-btn" data-cluster="devnet" id="cluster-devnet">Devnet</button>
+        <button type="button" class="cluster-btn active" data-cluster="mainnet" id="cluster-mainnet">Mainnet</button>
       </div>
       <span class="status-pill" title="RPC & pool state">
         <span class="status-dot" id="state-dot"></span>
@@ -909,8 +909,8 @@
         <span class="badge" id="badge-migrated">Curve Live</span>
       </h2>
       <div style="font-family: var(--font-mono); font-size: 12px; color: var(--ink-muted);">
-        Pool <a id="link-pool-short" href="https://solscan.io/?cluster=devnet" target="_blank" rel="noopener">GDb8…N4VZ</a> ·
-        Mint <a id="link-mint-short" href="https://solscan.io/?cluster=devnet" target="_blank" rel="noopener">JBaZ…i2Jk</a>
+        Pool <a id="link-pool-short" href="https://solscan.io/account/7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL" target="_blank" rel="noopener">7Bng…iNkL</a> ·
+        Mint <a id="link-mint-short" href="https://solscan.io/token/CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE" target="_blank" rel="noopener">CAPU…pMBE</a>
       </div>
     </div>
 
@@ -1124,19 +1124,19 @@
     <summary>
       <span>Connection, RPC &amp; On-Chain Addresses</span>
       <span class="summary-right">
-        <span id="conn-summary-label">devnet · public RPC</span>
+        <span id="conn-summary-label">mainnet · solana-rpc.publicnode.com</span>
         <span class="badge">Configure ▾</span>
       </span>
     </summary>
     <div class="conn-grid">
       <label class="conn-label" for="rpc">Solana RPC URL</label>
-      <input type="text" id="rpc" value="https://api.devnet.solana.com">
+      <input type="text" id="rpc" value="https://solana-rpc.publicnode.com">
 
       <label class="conn-label" for="pool">DBC Pool</label>
-      <input type="text" id="pool" value="GDb8yv3CEBQpsUuthMatW5zMp9RCTiamigpCZjJfN4VZ">
+      <input type="text" id="pool" value="7Bng3rv1XdWQvW4VHXuSr4gZJqdjgRD16DNyQJeciNkL">
 
       <label class="conn-label" for="mint">Base Mint (T22)</label>
-      <input type="text" id="mint" value="JBaZd2GNaV5Fmv3UVd4s2SP4bXQ22vWoQqbZdJ4fi2Jk">
+      <input type="text" id="mint" value="CAPU3xPH4a435pnba47uwDM7o94Dy2F5psWimCGPpMBE">
 
       <label class="conn-label" for="hook">Hook Program</label>
       <input type="text" id="hook" value="3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH">
