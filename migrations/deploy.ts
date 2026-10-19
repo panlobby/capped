@@ -1,4 +1,4 @@
-// Variant C launch params — single source of truth for mainnet launch.
+// Launch params — single source of truth for mainnet launch.
 // Supply 1B / 6 decimals. DBC curve start $10k -> migrate $1M (@ $100/SOL).
 // Hook streets: 50k/50k/75k/100k buys (exact), 25k chip sells (<= bet),
 // holds 200k/1M/4.5M/20M, REMAIN 950M/850M/625M. 10k tx, 775M buyable.
@@ -12,7 +12,7 @@
 
 import * as anchor from "@anchor-lang/core";
 
-export const VARIANT_C_PARAMS = {
+export const LAUNCH_PARAMS = {
   token: {
     totalSupplyTokens: 1_000_000_000,
     baseDecimals: 6,
@@ -64,8 +64,8 @@ export const VARIANT_C_PARAMS = {
     },
     tailDustCap: 10_000,
     // migration_lock = vault_0 - buyable_0 in base units, computed off-chain
-    // at pool creation from live accounts. ~224.59M tokens for Variant C
-    // (closed form getBaseTokenForSwap — never a fee walk, see MEDIUM-C1).
+    // at pool creation from live accounts. ~224.59M tokens expected.
+    // (closed form getBaseTokenForSwap — never a fee walk).
   },
 };
 
@@ -74,6 +74,6 @@ module.exports = async function (provider: anchor.AnchorProvider) {
   anchor.setProvider(provider);
 
   // Mainnet launch is manual (atomic bundle per runbook above), not via
-  // `anchor migrate`. Params live in VARIANT_C_PARAMS.
-  console.log("Variant C params loaded:", JSON.stringify(VARIANT_C_PARAMS.curve));
+  // `anchor migrate`. Params live in LAUNCH_PARAMS.
+  console.log("Launch params loaded:", JSON.stringify(LAUNCH_PARAMS.curve));
 };

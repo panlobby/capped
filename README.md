@@ -1,9 +1,9 @@
-# Capped Token — limit-holdem token on Meteora DBC (Variant C)
+# Capped Token — limit-holdem token on Meteora DBC
 
 Every trade is a pre-defined chip enforced on-chain by a Token-2022 transfer hook
 (`programs/hook/src/lib.rs`). No custom router, any DEX with transfer-hook support.
 
-## Streets (Variant C, 10k tx minimum, 775M buyable)
+## Streets (10k tx minimum net, 775M buyable)
 
 | street | sold | buy / sell chips (ExactOut buys) | hold/wallet |
 |---|---|---|---|
@@ -30,14 +30,14 @@ same swap, pool migrates to DAMM v2 — no limits after.
 
 Open `ui/index.html` (GitHub Pages serves `/ui/`). Read-only state needs no
 wallet; trading is opt-in via Phantom on devnet. All logic visible in
-`ui/trade.js`, constants in `ui/variant-c.json`, devnet addresses in
+`ui/trade.js`, constants in `ui/params.json`, devnet addresses in
 `ui/devnet.json`. No Helius, browser talks to Solana RPC directly.
 
-Devnet test checklist mirrors `scripts/spotcheck-pool2.ts`:
-50k buy pass → 30k `InvalidBetSize` → 25k+25k sells pass → P2P `P2PBlocked`.
+Devnet test checklist:
+chip buys pass → 30k reverts `InvalidBetSize` → chip sells pass → P2P `P2PBlocked`.
 
 ## Docs
 
 * Spec: `docs/limits-architecture.md`
-* Audits: `docs/audit.md`, `docs/audit-2026-10-14.md`, `docs/audit-variant-c.md`
-* Launch params: `migrations/deploy.ts` (`VARIANT_C_PARAMS`)
+* Security: `docs/SECURITY.md`
+* Launch params: `migrations/deploy.ts`

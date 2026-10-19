@@ -8,13 +8,13 @@ use spl_transfer_hook_interface::instruction::{ExecuteInstruction, TransferHookI
 declare_id!("3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH");
 
 // ---- Units: 6 decimals, 1 token = 1_000_000 base units ----
-/// 12.5k tokens in base units. Kept for granularity; GCD of Variant C
+/// 12.5k tokens in base units. Kept for granularity; GCD of the chip streets
 /// bets/holds is 25k (SELL_STEP), all sizes stay whole multiples of both.
 pub const UNIT: u64 = 12_500_000_000;
 /// Sell chip step: 25k tokens in base units. Sells must be a multiple of
 /// this and <= current street bet (25k / 50k / 75k / 100k).
 pub const SELL_STEP: u64 = 25_000_000_000;
-// Bets per street (base units), Variant C ($1M migrate, 10k tx):
+// Bets per street (base units), chip streets ($1M migrate, 10k tx):
 // S1 50k (4U), S2 50k (4U), S3 75k (6U), S4 100k (8U).
 // S1 0->50M (1000 tx), S2 50->150M (2000 tx), S3 150->375M (3000 tx),
 // S4 375->775M (4000 tx). Buyable 775M, lock ~225M (22.5%).

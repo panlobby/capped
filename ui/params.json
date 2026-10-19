@@ -1,10 +1,4 @@
 {
-  "variant": "C",
-  "source_of_truth": {
-    "hook_constants": "programs/hook/src/lib.rs (SELL_STEP, BET_S1..S4, HOLD_S1..S4, REMAIN_S1..S3_MIN, TAIL_DUST_CAP, §8 chip rule)",
-    "launch_params": "migrations/deploy.ts VARIANT_C_PARAMS",
-    "spec": "docs/limits-architecture.md"
-  },
   "token": { "supply_tokens": 1000000000, "decimals": 6, "buyable_tokens": 775411323, "lock_tokens": 224588677 },
   "hook": {
     "program_id": "3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH",

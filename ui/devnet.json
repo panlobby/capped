@@ -2,7 +2,6 @@
   "cluster": "devnet",
   "rpc_default": "https://api.devnet.solana.com",
   "hook_program": "3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH",
-  "note": "Pool #2 runs the OLD $10M curve (threshold ~23256 SOL) with the NEW chip-street hook. Verified live 2026-10-15: vault=999850000000000 (S1), lock=232567941009412, quoteReserve=6316517, isMigrated=0.",
   "pool2": {
     "pool": "GDb8yv3CEBQpsUuthMatW5zMp9RCTiamigpCZjJfN4VZ",
     "mint": "JBaZd2GNaV5Fmv3UVd4s2SP4bXQ22vWoQqbZdJ4fi2Jk",
@@ -12,11 +11,5 @@
     "lock_raw": "232567941009412"
   },
   "tiny_config": "GPduPehufvwcwFK4mmDck3VkPRuD8uBEEXapV8iNhuWR",
-  "damm_config": "7F6dnUcRuyM2TwR8myT1dYypFXpPSxqwKNSFNkxyNESd",
-  "scripts": {
-    "spotcheck": "scripts/spotcheck-pool2.ts (S1 50k buy, 30k revert, 25k chip sells, P2P block)",
-    "create_tiny": "scripts/tiny3-create.ts",
-    "buyout_tiny": "scripts/tiny3-buyout.ts (binary-search tail)",
-    "migrate_tiny": "scripts/tiny3-migrate.ts"
-  }
+  "damm_config": "7F6dnUcRuyM2TwR8myT1dYypFXpPSxqwKNSFNkxyNESd"
 }

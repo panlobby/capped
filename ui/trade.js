@@ -2,8 +2,7 @@
 // No backend, no Helius. Read-only state via public RPC; swaps via official
 // Meteora DBC SDK; wallet signs locally (Phantom). Chip math mirrors
 // programs/hook/src/lib.rs §8 (is_chip shared by buys/sells, tail drain only
-// when buyable < 25k); quote/tail-search mirrors scripts/spotcheck-pool2.ts +
-// scripts/tiny3-buyout.ts.
+// when buyable < 25k). Full rules: docs/limits-architecture.md.
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import {
   DynamicBondingCurveClient,

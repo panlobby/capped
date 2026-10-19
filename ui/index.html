@@ -12,7 +12,8 @@
   Read-only state needs no wallet. Trading needs Phantom (devnet) opt-in.
   Rules: every street trades 25k-multiple chips up to the street max
   (S1/S2: 25k|50k, S3: +75k, S4: +100k) — buys AND sells. Tail drain only
-  when buyable < 25k. Test checklist mirrors scripts/spotcheck-pool2.ts.
+  when buyable < 25k. Test checklist: chip buys pass, wrong-size (30k)
+  reverts InvalidBetSize, chip sells pass, wallet-to-wallet reverts P2PBlocked.
 -->
 <script type="importmap">
 {
@@ -85,7 +86,7 @@ quotes <code>ExactOut(chip)</code> via the DBC SDK and sends <code>swap2WithTran
 <div id="log"></div>
 <p>
   Explorer: <a id="link-scan" href="https://solscan.io/?cluster=devnet">solscan devnet</a> ·
-  Audits: <code>docs/audit-variant-c.md</code> · Spec: <code>docs/limits-architecture.md</code>
+  Security: <code>docs/SECURITY.md</code> · Spec: <code>docs/limits-architecture.md</code>
 </p>
 <p class="warn">Devnet only. Public RPC is rate-limited — paste your own RPC if refreshes fail with 429.</p>
 </section>
