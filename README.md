@@ -1,4 +1,4 @@
-#A capped token on Meteora DBC with a hook.
+# A capped token on Meteora DBC with a hook.
 
 Every trade is a pre-defined chip enforced on-chain by a Token-2022 transfer hook
 (`programs/hook/src/lib.rs`). No custom router, any DEX with transfer-hook support.
