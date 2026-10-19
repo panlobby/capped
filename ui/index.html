@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capped Token — transparent devnet trade panel (chip streets)</title>
+<!--
+  Static only: no backend, no Helius, no build step. Open this file and
+  trade.js in the repo to see everything under the hood.
+  Versions pinned to match bun.lock resolved versions (2026-10-15):
+  web3.js 1.99.0, DBC SDK 1.5.13, spl-token 0.4.15, bn.js 5.2.5.
+  Read-only state needs no wallet. Trading needs Phantom (devnet) opt-in.
+  Rules: every street trades 25k-multiple chips up to the street max
+  (S1/S2: 25k|50k, S3: +75k, S4: +100k) — buys AND sells. Tail drain only
+  when buyable < 25k. Test checklist mirrors scripts/spotcheck-pool2.ts.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "@solana/web3.js": "https://esm.sh/@solana/web3.js@1.99.0",
+    "@meteora-ag/dynamic-bonding-curve-sdk": "https://esm.sh/@meteora-ag/dynamic-bonding-curve-sdk@1.5.13",
+    "@solana/spl-token": "https://esm.sh/@solana/spl-token@0.4.15",
+    "bn.js": "https://esm.sh/bn.js@5.2.5"
+  }
+}
+</script>
+<style>
+  body { font-family: monospace; max-width: 860px; margin: 2em auto; padding: 0 1em; }
+  section { border: 1px solid #ccc; padding: 1em; margin-bottom: 1em; }
+  table td { padding: 2px 10px 2px 0; vertical-align: top; }
+  button { margin: 2px; }
+  button:disabled { opacity: 0.4; }
+  button.sel { outline: 2px solid #000; }
+  #log { white-space: pre-wrap; background: #f6f6f6; padding: 1em; min-height: 4em; }
+  .warn { color: #a00; }
+  input[type=text] { width: 100%; }
+</style>
+</head>
+<body>
+<h1>Capped Token — devnet trade panel (chip streets)</h1>
+<p>
+  Open source, static page. Source: <code>ui/index.html</code> + <code>ui/trade.js</code>
+  in this repo. Constants: <code>ui/variant-c.json</code>. Devnet addresses: <code>ui/devnet.json</code>.
+  Hook: <code>programs/hook/src/lib.rs</code>. No backend, no Helius — browser talks to Solana RPC directly.
+</p>
+
+<section>
+<h2>1. Connection (read-only, no wallet)</h2>
+<table>
+<tr><td>RPC</td><td><input type="text" id="rpc" value="https://api.devnet.solana.com"></td></tr>
+<tr><td>Pool</td><td><input type="text" id="pool" value="GDb8yv3CEBQpsUuthMatW5zMp9RCTiamigpCZjJfN4VZ"></td></tr>
+<tr><td>Mint</td><td><input type="text" id="mint" value="JBaZd2GNaV5Fmv3UVd4s2SP4bXQ22vWoQqbZdJ4fi2Jk"></td></tr>
+<tr><td>Hook program</td><td><input type="text" id="hook" value="3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH"></td></tr>
+</table>
+<p><button id="btn-state">Refresh state</button> <span id="state-status"></span></p>
+<table id="state-table"></table>
+</section>
+
+<section>
+<h2>2. Wallet (opt-in, Phantom devnet only)</h2>
+<p><button id="btn-connect">Connect Phantom</button> <span id="wallet-status">not connected</span></p>
+<table id="wallet-table"></table>
+</section>
+
+<section>
+<h2>3. Buy (25k chips, ExactOut)</h2>
+<p>Pick a chip, quote, buy. Stock ExactIn buys revert <code>InvalidBetSize</code> — this panel
+quotes <code>ExactOut(chip)</code> via the DBC SDK and sends <code>swap2WithTransferHook</code>.</p>
+<p id="buy-btns"></p>
+<p>
+  Slippage % <input type="text" id="slip" value="10" style="width:4em">
+  <button id="btn-quote">Quote selected chip</button> <span id="quote-out"></span>
+</p>
+<p><button id="btn-buy">Buy selected chip</button> <button id="btn-tail">Drain tail (only when buyable &lt; 25k)</button></p>
+</section>
+
+<section>
+<h2>4. Sell (25k chips, ExactIn)</h2>
+<p>Sells use the same chip set. Buttons filter automatically to chips ≤ street max.</p>
+<p id="sell-btns"></p>
+</section>
+
+<section>
+<h2>5. Log</h2>
+<div id="log"></div>
+<p>
+  Explorer: <a id="link-scan" href="https://solscan.io/?cluster=devnet">solscan devnet</a> ·
+  Audits: <code>docs/audit-variant-c.md</code> · Spec: <code>docs/limits-architecture.md</code>
+</p>
+<p class="warn">Devnet only. Public RPC is rate-limited — paste your own RPC if refreshes fail with 429.</p>
+</section>
+
+<script type="module" src="./trade.js"></script>
+</body>
+</html>

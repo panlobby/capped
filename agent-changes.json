@@ -429,6 +429,22 @@
       ],
       "details": "External review caught: buyable<bet forced full drain, bricking 25/50/75k chips (e.g. 86.32k buyable on S4). Fix: (chip && amount<=buyable) || drain. Caught own fixture bug (buyable is PRE-based) + integration single-ctx impossibility (split sTailChip/sTailChipOver). Redeployed devnet (4D9r8...), 25k round-trip live. Docs \u00a78b updated.",
       "next": "Commit. Remaining pre-mainnet: metadata, upgrade-authority decision, atomic launch (+ optional binary-search live-fire)."
+    },
+    {
+      "date": "2026-10-19",
+      "agent": "opencode",
+      "type": "feature",
+      "summary": "Added README.md and transparent static trade panel in ui/ (chip streets, devnet live).",
+      "files": [
+        "README.md",
+        "ui/index.html",
+        "ui/trade.js",
+        "ui/variant-c.json",
+        "ui/devnet.json",
+        "agent-changes.json"
+      ],
+      "details": "Static open-source trade panel in ui/ (no backend, no Helius, pinned esm.sh importmap matching bun.lock). Read-only pool/vault/street/lock/quote state via direct Solana RPC; opt-in Phantom devnet trading with 25k-multiple ExactOut buy chips, ExactIn sell chips, and binary-search tail drain (<25k buyable). Created README.md explainer and linked repo to GitHub.",
+      "next": "Polish UI (devnet/mainnet cluster switch, self-contained explainer table) and enable GitHub Pages."
     }
   ]
 }

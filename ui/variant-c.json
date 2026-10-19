@@ -1,0 +1,44 @@
+{
+  "variant": "C",
+  "source_of_truth": {
+    "hook_constants": "programs/hook/src/lib.rs (SELL_STEP, BET_S1..S4, HOLD_S1..S4, REMAIN_S1..S3_MIN, TAIL_DUST_CAP, §8 chip rule)",
+    "launch_params": "migrations/deploy.ts VARIANT_C_PARAMS",
+    "spec": "docs/limits-architecture.md"
+  },
+  "token": { "supply_tokens": 1000000000, "decimals": 6, "buyable_tokens": 775411323, "lock_tokens": 224588677 },
+  "hook": {
+    "program_id": "3vRrCG5RnmrpTAr91rq9NnZqKCPgaDCmpEWKRLUTdqnH",
+    "sell_step_tokens": 25000,
+    "chips_tokens": { "s1": [25000, 50000], "s2": [25000, 50000], "s3": [25000, 50000, 75000], "s4": [25000, 50000, 75000, 100000] },
+    "street_max_tokens": { "s1": 50000, "s2": 50000, "s3": 75000, "s4": 100000 },
+    "holds_tokens": { "s1": 200000, "s2": 1000000, "s3": 4500000, "s4": 20000000 },
+    "remain_min_tokens": { "s1": 950000000, "s2": 850000000, "s3": 625000000 },
+    "streets_sold": { "s1": "0->50M", "s2": "50->150M", "s3": "150->375M", "s4": "375->775M" },
+    "tx_to_clear_min": { "s1": 1000, "s2": 2000, "s3": 3000, "s4": 4004 },
+    "tail_dust_cap_raw": 10000,
+    "errors": {
+      "6005": "InvalidBetSize",
+      "6006": "ExceedsHold",
+      "6007": "P2PBlocked",
+      "6011": "InvalidPool"
+    }
+  },
+  "curve": {
+    "initial_mcap_sol": 100,
+    "migration_mcap_sol": 10000,
+    "expected_threshold_sol": 2245.88,
+    "liquidity_weights": [10, 12, 15, 19, 24, 29, 36, 45, 56, 69, 86, 106, 132, 163, 203, 251],
+    "fee_bps": 25,
+    "collect_fee_mode": "QuoteToken",
+    "migration": "MET_DAMM_V2 / FixedBps25, creator 0%"
+  },
+  "rules": [
+    "Every street trades 25k-multiple chips up to the street max — buys AND sells.",
+    "Buys must be ExactOut(chip). Stock ExactIn reverts InvalidBetSize.",
+    "Fitting chips keep working near the end (chip <= buyable). Drain (single tx to <=0.01 token above lock) only when buyable < 25k.",
+    "Wallet-to-wallet transfers blocked (P2PBlocked). DEX only.",
+    "Hold cap checked on post-credit balance. Max bag 20M = 2%.",
+    "Streets are reversible: sells push the vault back across borders. 10k tx is the net-buy lower bound — sells add volume, not progress.",
+    "Graduation revokes the hook in the same swap, then DAMM v2. No limits after."
+  ]
+}
