@@ -13,5 +13,6 @@
   "logo_uri": "https://ar-io.dev/jLatWNlqr1bPoejmC0RF_4RwzhN7FEdLdTxBFSlmeI8",
   "tx_program_deploy": "vX2PHqamHuJmJEdfCoDBuw9gDoT5KfWJujR3Yn7PNNb9q4ebvaSDMzGjzxA8q5kus5rah316QuuZa15smwVA7Fc",
   "tx_create_config": "3n8mnZZYmwB5P1JNasVnxSxu1dDcx1jL9aMYM3zwsqVTwZtD4WyGft9g6r7JRvATb59ZRU9qbZS7NHYZxAcgGhv4",
-  "tx_create_pool_and_init_hook": "kQkWN6gT7vM5dYkozZLCWCocQerJEGdUjjf2pUfXc5zKyrR5Mzeq7vqfowheZJfA9uUsrymRNx3cgAfgE9LzdhH"
+  "tx_create_pool_and_init_hook": "kQkWN6gT7vM5dYkozZLCWCocQerJEGdUjjf2pUfXc5zKyrR5Mzeq7vqfowheZJfA9uUsrymRNx3cgAfgE9LzdhH",
+  "tx_create_pool_metadata": "5QeLxkViSYanzqqBLJqB9V99J9uPZj7dv5YfCAYY9YvGPV9nfAYAzP8paoNzbr5P1GUddVLNJZ3WPYY2LEeQHWPd"
 }
