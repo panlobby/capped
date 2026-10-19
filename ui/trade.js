@@ -312,8 +312,8 @@ async function refreshState() {
   const live = p.poolState ?? p;
   const cfg = await dbc.state.getPoolConfig(live.config ?? p.config);
   const vaultAddr = deriveDbcTokenVaultAddress(pool, mint);
-  const vaultBal = await conn.getTokenAccountBalance(vaultAddr, "confirmed");
-  const vault = new BN(vaultBal.value.amount);
+  const vaultAcc = await getAccount(conn, vaultAddr, "confirmed", TOKEN_2022_PROGRAM_ID);
+  const vault = new BN(vaultAcc.amount.toString());
 
   // Hook lock from config PDA ["config", mint]; legacy (105B) => lock 0.
   let lock = new BN(0);
@@ -415,12 +415,29 @@ async function ensureAta(conn, mint, owner) {
   }
 }
 
+async function waitSig(conn, sig) {
+  for (let i = 0; i < 30; i++) {
+    try {
+      const { value } = await conn.getSignatureStatuses([sig]);
+      const st = value?.[0];
+      if (st) {
+        if (st.err) throw new Error(JSON.stringify(st.err));
+        if (st.confirmationStatus === "confirmed" || st.confirmationStatus === "finalized") return sig;
+      }
+    } catch (e) {
+      if (String(e?.message ?? e).includes("InstructionError")) throw e;
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return sig;
+}
+
 async function sendSwap(tx) {
   tx.feePayer = walletPk;
   tx.recentBlockhash = (await S.conn.getLatestBlockhash("confirmed")).blockhash;
   const signed = await window.solana.signTransaction(tx);
   const sig = await S.conn.sendRawTransaction(signed.serialize());
-  await S.conn.confirmTransaction(sig, "confirmed");
+  await waitSig(S.conn, sig);
   return sig;
 }
 
@@ -441,7 +458,6 @@ async function doBuy() {
     const q = quoteExactOut(S.live, S.cfg, buyChip);
     const maxIn = q.includedFeeInputAmount.mul(new BN(100 + slipPct)).div(new BN(100));
     log(`buying ${fmtTok(buyChip)} tokens: ~${fmtSol(q.includedFeeInputAmount)} SOL (max ${fmtSol(maxIn)} SOL)…`);
-    await ensureAta(S.conn, cfgOf().mint, walletPk);
     const tx = await S.dbc.pool.swap2WithTransferHook({
       owner: walletPk, pool, swapBaseForQuote: false,
       swapMode: SwapMode.ExactOut, amountOut: buyChip, maximumAmountIn: maxIn, referralTokenAccount: null,
@@ -468,7 +484,6 @@ async function doDrain() {
     const q = quoteExactOut(S.live, S.cfg, amountOut);
     const maxIn = q.includedFeeInputAmount.mul(new BN(100 + slipPct)).div(new BN(100));
     log(`draining tail ${fmtTok(amountOut)} tokens: ~${fmtSol(q.includedFeeInputAmount)} SOL (max ${fmtSol(maxIn)} SOL)…`);
-    await ensureAta(S.conn, cfgOf().mint, walletPk);
     const tx = await S.dbc.pool.swap2WithTransferHook({
       owner: walletPk, pool, swapBaseForQuote: false,
       swapMode: SwapMode.ExactOut, amountOut, maximumAmountIn: maxIn, referralTokenAccount: null,
@@ -500,7 +515,6 @@ async function doSell(amountInBn) {
       minOut = BN.max(new BN(1), q.outputAmount.mul(new BN(Math.max(0, 100 - slipPct))).div(new BN(100)));
     } catch { /* fallback to 1 lamport if quote unavailable */ }
     log(`selling ${fmtTok(amountIn)} tokens (min ${fmtSol(minOut)} SOL)…`);
-    await ensureAta(S.conn, cfgOf().mint, walletPk);
     const tx = await S.dbc.pool.swap2WithTransferHook({
       owner: walletPk, pool, swapBaseForQuote: true,
       swapMode: SwapMode.ExactIn, amountIn, minimumAmountOut: minOut, referralTokenAccount: null,
